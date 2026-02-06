@@ -1,0 +1,7 @@
+For corelib:
+ - Add platform layer:
+    - Window: creation, toggling fullscreen
+    - Input: key codes, keyboard, mouse, maybe gamepad
+    - get_time_nanoseconds
+    - DPI Awareness
+    - timeBeginPeriod
