@@ -5,3 +5,22 @@ For corelib:
     - get_time_nanoseconds
     - DPI Awareness
     - timeBeginPeriod
+
+For sandbox:
+ - Add D3D12:
+     - Initialize device, swap chain, command queues, render targets and clear the render targets
+     - Add shaders and pipelines and draw a triangle with them
+     - Add vertex and index buffers and draw using them
+     - Load cgltf models
+     - Add imgui
+     - Render the sponza scene
+     - Add directional lights
+     - Add point lights
+     - Add spot light
+     - Add PBR
+     - Add forward+ rendering
+     - Add cascaded shadow maps
+     - Add skeletal animation
+     - Add omni directional shadows for point lights
+     - Add SSAO
+     - Experiment with using raytracing for the same stuff that DOOM: The Dark Ages uses
