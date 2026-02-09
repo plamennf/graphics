@@ -16,4 +16,6 @@
 #include "math/quaternion.h"
 #include "math/rectangle.h"
 
+#include "key_codes.h"
+#include "keyboard.h"
 #include "platform.h"

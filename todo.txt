@@ -1,9 +1,6 @@
 For corelib:
  - Add platform layer:
-    - Input: key codes, keyboard, mouse, maybe gamepad
-    - get_time_nanoseconds
-    - DPI Awareness
-    - timeBeginPeriod
+    - Input: mouse, maybe gamepad
 
 For sandbox:
  - Add D3D12:

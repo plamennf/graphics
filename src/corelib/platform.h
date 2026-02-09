@@ -6,6 +6,8 @@ struct Platform_Window {
     int width;
     int height;
     bool is_open;
+
+    Keyboard keyboard;
 };
 
 void platform_init();
@@ -16,3 +18,5 @@ void platform_poll_events();
 void *platform_window_get_native(Platform_Window *window);
 bool platform_window_was_resized(Platform_Window *window);
 void platform_window_toggle_fullscreen(Platform_Window *window);
+
+u64 platform_get_time_in_nanoseconds();

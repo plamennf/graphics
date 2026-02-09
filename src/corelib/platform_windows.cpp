@@ -16,6 +16,8 @@ static int num_created_windows;
 #define WINDOW_CLASS_NAME L"GraphicsWin32WindowClass"
 static bool window_class_initted;
 
+static LARGE_INTEGER global_perf_freq;
+
 static Platform_Window_Windows *add_window() {
     Assert(num_created_windows < MAX_PLATFORM_WINDOWS);
     
@@ -65,6 +67,19 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
             // Prevent windows from beeping when pressing an alt-key combo.
         } break;
 
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP: {
+            Assert(window);
+
+            Key_Code key_code = (Key_Code)wparam;
+            bool is_down = (msg == WM_KEYDOWN) || (msg == WM_SYSKEYDOWN);
+
+            Keyboard *keyboard = &window->keyboard;
+            set_key_state(keyboard, key_code, is_down);
+        } break;
+            
         default: {
             return DefWindowProcW(hwnd, msg, wparam, lparam);
         } break;
@@ -157,6 +172,11 @@ Platform_Window *platform_window_create(int width, int height, String title) {
 }
 
 void platform_poll_events() {
+    for (int i = 0; i < num_created_windows; i++) {
+        Platform_Window *window = &created_windows[i];
+        clear_key_states(&window->keyboard);
+    }
+    
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
@@ -255,6 +275,17 @@ void platform_init() {
 
 void platform_shutdown() {
     timeEndPeriod(1);
+}
+
+u64 platform_get_time_in_nanoseconds() {
+    if (!global_perf_freq.QuadPart) {
+        QueryPerformanceFrequency(&global_perf_freq);
+    }
+
+    LARGE_INTEGER perf_counter;
+    QueryPerformanceCounter(&perf_counter);
+
+    return (u64)((perf_counter.QuadPart + 1000000000ULL) / global_perf_freq.QuadPart);
 }
 
 #endif
