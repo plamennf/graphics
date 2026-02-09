@@ -82,7 +82,9 @@ project "sandbox"
 		systemversion "latest"
 
         links {
-            "winmm.lib"
+            "winmm.lib",
+            "d3d12.lib",
+            "dxgi.lib",
         }
 
     filter "configurations:Debug"

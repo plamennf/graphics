@@ -16,4 +16,4 @@ void ma_reset(Memory_Arena *arena);
 #define MaAllocStruct(arena, Type, ...) (Type *)ma_alloc(arena, sizeof(Type), __VA_ARGS__)
 #define MaAllocArray(arena, Type, Count, ...) (Type *)ma_alloc(arena, (Count) * sizeof(Type), __VA_ARGS__)
 
-void *ma_alloc(Memory_Arena *arena, s64 size, s64 alignment = MEMORY_ARENA_DEFAULT_ALIGNMENT);
+void *ma_alloc(Memory_Arena *arena, s64 size, bool zero_memory = true, s64 alignment = MEMORY_ARENA_DEFAULT_ALIGNMENT);

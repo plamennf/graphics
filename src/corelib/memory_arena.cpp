@@ -15,7 +15,7 @@ void ma_init(Memory_Arena *arena, s64 size) {
     arena->occupied = 0;
 }
 
-void *ma_alloc(Memory_Arena *arena, s64 size, s64 alignment) {
+void *ma_alloc(Memory_Arena *arena, s64 size, bool zero_memory, s64 alignment) {
     size = (size + alignment - 1) & ~(alignment - 1);
 
     if (arena->occupied + size > arena->size) {
@@ -25,6 +25,10 @@ void *ma_alloc(Memory_Arena *arena, s64 size, s64 alignment) {
     
     void *result     = (void *)(arena->data + arena->occupied);
     arena->occupied += size;
+
+    if (zero_memory) {
+        memset(result, 0, size);
+    }
     
     return result;
 }

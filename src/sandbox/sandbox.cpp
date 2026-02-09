@@ -1,6 +1,7 @@
 #include "pch.h"
+#include "renderer.h"
 
-#include <stdio.h>
+Global_Variables globals;
 
 int main(int argc, char *argv[]) {
     init_temporary_storage(Kilobytes(40));
@@ -10,8 +11,12 @@ int main(int argc, char *argv[]) {
 
     platform_init();
     defer { platform_shutdown(); };
+
+    ma_init(&globals.permanent_memory, Kilobytes(1));
     
     Platform_Window *window = platform_window_create(0, 0, "Sandbox");
+    Renderer *renderer = renderer_create(RENDER_API_D3D12, window, true);
+    defer { renderer_shutdown(renderer); };
     
     while (window->is_open) {
         reset_temporary_storage();        
@@ -32,6 +37,9 @@ int main(int argc, char *argv[]) {
         if (is_key_pressed(&window->keyboard, KEY_ESCAPE)) {
             window->is_open = false;
         }
+
+        renderer_execute_render_commands(renderer);
+        renderer_wait_for_previous_frame(renderer);
     }
     
     return 0;
