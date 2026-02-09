@@ -15,3 +15,5 @@
 #include "math/matrix4.h"
 #include "math/quaternion.h"
 #include "math/rectangle.h"
+
+#include "platform.h"

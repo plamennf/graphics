@@ -1,0 +1,260 @@
+#include "corelib.h"
+
+#ifdef PLATFORM_WINDOWS
+
+#include <Windows.h>
+
+struct Platform_Window_Windows : public Platform_Window {
+    HWND hwnd;
+    WINDOWPLACEMENT prev_wp;
+    bool was_resized;
+};
+
+static Platform_Window_Windows created_windows[MAX_PLATFORM_WINDOWS];
+static int num_created_windows;
+
+#define WINDOW_CLASS_NAME L"GraphicsWin32WindowClass"
+static bool window_class_initted;
+
+static Platform_Window_Windows *add_window() {
+    Assert(num_created_windows < MAX_PLATFORM_WINDOWS);
+    
+    Platform_Window_Windows *result = &created_windows[num_created_windows++];
+
+    result->prev_wp.length = sizeof(WINDOWPLACEMENT);
+    result->was_resized    = false;
+
+    return result;
+}
+
+static Platform_Window_Windows *pop_last_window() {
+    if (num_created_windows <= 0) return NULL;
+
+    Platform_Window_Windows *result = &created_windows[num_created_windows--];
+    return result;
+}
+
+static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    Platform_Window_Windows *window = (Platform_Window_Windows *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    
+    switch (msg) {
+        case WM_CREATE: {
+            CREATESTRUCTW *cs = (CREATESTRUCTW *)lparam;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+            return DefWindowProcW(hwnd, msg, wparam, lparam);
+        } break;
+        
+        case WM_CLOSE:
+        case WM_DESTROY: {
+            Assert(window);
+            window->is_open = false;
+        } break;
+
+        case WM_SIZE: {
+            Assert(window);
+            
+            RECT rect;
+            GetClientRect(hwnd, &rect);
+            window->width  = rect.right  - rect.left;
+            window->height = rect.bottom - rect.top;
+
+            window->was_resized = true;
+        } break;
+
+        case WM_SYSCHAR: {
+            // Prevent windows from beeping when pressing an alt-key combo.
+        } break;
+
+        default: {
+            return DefWindowProcW(hwnd, msg, wparam, lparam);
+        } break;
+    }
+
+    return 0;
+}
+
+static void init_window_class() {
+    if (window_class_initted) return;
+
+    WNDCLASSEXW wc   = {};
+    wc.cbSize        = sizeof(wc);
+    wc.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.lpfnWndProc   = platform_wnd_proc;
+    wc.hInstance     = GetModuleHandleW(NULL);
+    wc.hIcon         = LoadIconW(NULL, IDI_APPLICATION);
+    wc.hCursor       = LoadCursorW(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+    wc.lpszClassName = WINDOW_CLASS_NAME;
+    wc.hIconSm       = LoadIconW(NULL, IDI_APPLICATION);
+
+    if (RegisterClassExW(&wc) == 0) {
+        logprintf("Failed to register the window class!\n");
+        return;
+    }
+    
+    window_class_initted = true;
+}
+
+Platform_Window *platform_window_create(int width, int height, String title) {
+    if (!window_class_initted) {
+        init_window_class();
+        if (!window_class_initted) return NULL;
+    }
+
+    if (width <= 0 || height <= 0) {
+        HWND desktop = GetDesktopWindow();
+        RECT desktop_rect;
+        GetWindowRect(desktop, &desktop_rect);
+
+        int desktop_width  = desktop_rect.right - desktop_rect.left;
+        int desktop_height = desktop_rect.bottom - desktop_rect.top;
+
+        width  = (int)((double)desktop_width  * 2.0/3.0);
+        height = (int)((double)desktop_height * 2.0/3.0);
+    }
+
+    Platform_Window_Windows *result = add_window();
+
+    DWORD window_style = WS_OVERLAPPEDWINDOW;
+    
+    RECT  window_rect  = {0, 0, width, height};
+    AdjustWindowRect(&window_rect, window_style, FALSE);
+
+    int window_width   = window_rect.right  - window_rect.left;
+    int window_height  = window_rect.bottom - window_rect.top;
+
+    wchar_t wide_title[4096] = {};
+    MultiByteToWideChar(CP_UTF8, 0, title.data, title.length, wide_title, ArrayCount(wide_title));
+    result->hwnd = CreateWindowExW(0, WINDOW_CLASS_NAME, wide_title, window_style,
+                                   CW_USEDEFAULT, CW_USEDEFAULT,
+                                   window_width, window_height,
+                                   NULL, NULL, GetModuleHandleW(NULL), result);
+    if (result->hwnd == NULL) {
+        logprintf("Failed to create window!\n");
+        pop_last_window();
+        return NULL;
+    }
+
+    MONITORINFOEXW mi = { sizeof(mi) };
+    GetMonitorInfoW(MonitorFromWindow(result->hwnd, MONITOR_DEFAULTTOPRIMARY), &mi);
+
+    int monitor_width_without_taskbar  = mi.rcWork.right  - mi.rcWork.left;
+    int monitor_height_without_taskbar = mi.rcWork.bottom - mi.rcWork.top;
+
+    int window_x = mi.rcWork.left + ((monitor_width_without_taskbar  - window_width)  / 2);
+    int window_y = mi.rcWork.top  + ((monitor_height_without_taskbar - window_height) / 2);
+
+    SetWindowPos(result->hwnd, HWND_TOP, window_x, window_y, 0, 0, SWP_NOSIZE);
+
+    UpdateWindow(result->hwnd);
+    ShowWindow(result->hwnd, SW_SHOWDEFAULT);
+
+    result->width   = width;
+    result->height  = height;
+    result->is_open = true;
+
+    return result;
+}
+
+void platform_poll_events() {
+    MSG msg;
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+}
+
+void *platform_window_get_native(Platform_Window *_window) {
+    Assert(_window);
+    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
+    return (void *)window->hwnd;
+}
+
+bool platform_window_was_resized(Platform_Window *_window) {
+    Assert(_window);
+    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
+
+    bool result = window->was_resized;
+    window->was_resized = false;
+    return result;
+}
+
+// From https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
+void platform_window_toggle_fullscreen(Platform_Window *_window) {
+    Assert(_window);
+    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
+    
+    DWORD style = GetWindowLong(window->hwnd, GWL_STYLE);
+    if (style & WS_OVERLAPPEDWINDOW) {
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetWindowPlacement(window->hwnd, &window->prev_wp) &&
+            GetMonitorInfo(MonitorFromWindow(window->hwnd,
+                                             MONITOR_DEFAULTTOPRIMARY), &mi)) {
+            SetWindowLong(window->hwnd, GWL_STYLE,
+                          style & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(window->hwnd, HWND_TOP,
+                         mi.rcMonitor.left, mi.rcMonitor.top,
+                         mi.rcMonitor.right - mi.rcMonitor.left,
+                         mi.rcMonitor.bottom - mi.rcMonitor.top,
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+    } else {
+        SetWindowLong(window->hwnd, GWL_STYLE,
+                      style | WS_OVERLAPPEDWINDOW);
+        SetWindowPlacement(window->hwnd, &window->prev_wp);
+        SetWindowPos(window->hwnd, NULL, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                     SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+}
+
+void platform_init() {
+    timeBeginPeriod(1);
+
+    // Try Windows 10+ per-monitor V2 awareness
+    HMODULE shcore = LoadLibraryA("Shcore.dll");
+    if (shcore) {
+        typedef HRESULT(WINAPI *SetProcessDpiAwarenessFn)(int);
+        SetProcessDpiAwarenessFn SetProcessDpiAwarenessPtr =
+            (SetProcessDpiAwarenessFn)GetProcAddress(shcore, "SetProcessDpiAwareness");
+        if (SetProcessDpiAwarenessPtr) {
+            // 2 - PROCESS_PER_MONITOR_DPI_AWARE
+            SetProcessDpiAwarenessPtr(2);
+            FreeLibrary(shcore);
+            return;
+        }
+        FreeLibrary(shcore);
+    }
+
+    // Try Windows 8.1+ API (SetProcessDpiAwarenessContext)
+    HMODULE user32 = LoadLibraryA("User32.dll");
+    if (user32) {
+        typedef BOOL(WINAPI *SetProcessDpiAwarenessContextFn)(HANDLE);
+        SetProcessDpiAwarenessContextFn SetProcessDpiAwarenessContextPtr =
+            (SetProcessDpiAwarenessContextFn)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+        if (SetProcessDpiAwarenessContextPtr) {
+            SetProcessDpiAwarenessContextPtr(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            FreeLibrary(user32);
+            return;
+        }
+        FreeLibrary(user32);
+    }
+
+    // Fallback for Windows 7 and older
+    HMODULE user32_old = LoadLibraryA("User32.dll");
+    if (user32_old) {
+        typedef BOOL(WINAPI *SetProcessDPIAwareFn)(void);
+        SetProcessDPIAwareFn SetProcessDPIAwarePtr =
+            (SetProcessDPIAwareFn)GetProcAddress(user32_old, "SetProcessDPIAware");
+        if (SetProcessDPIAwarePtr) {
+            SetProcessDPIAwarePtr();
+        }
+        FreeLibrary(user32_old);
+    }
+}
+
+void platform_shutdown() {
+    timeEndPeriod(1);
+}
+
+#endif

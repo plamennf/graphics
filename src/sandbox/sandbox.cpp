@@ -8,15 +8,15 @@ int main(int argc, char *argv[]) {
     init_logging();
     defer { shutdown_logging(); };
 
-    char *s = TAllocArray(char, 6);
-    s[0] = 'H';
-    s[1] = 'e';
-    s[2] = 'l';
-    s[3] = 'l';
-    s[4] = 'o';
-    s[5] = '\0';
+    platform_init();
+    defer { platform_shutdown(); };
     
-    logprintf("%s, World!\n", s);
+    Platform_Window *window = platform_window_create(0, 0, "Sandbox");
+    platform_window_toggle_fullscreen(window);
+    
+    while (window->is_open) {
+        platform_poll_events();
+    }
     
     return 0;
 }

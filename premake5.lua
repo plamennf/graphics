@@ -66,7 +66,7 @@ project "sandbox"
     }
 
     links {
-         "corelib"
+         "corelib",
     }
 
     files {
@@ -80,6 +80,10 @@ project "sandbox"
 
     filter "system:windows"
 		systemversion "latest"
+
+        links {
+            "winmm.lib"
+        }
 
     filter "configurations:Debug"
 		defines "BUILD_DEBUG"
