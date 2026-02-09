@@ -14,6 +14,7 @@ int main(int argc, char *argv[]) {
     Platform_Window *window = platform_window_create(0, 0, "Sandbox");
     
     while (window->is_open) {
+        reset_temporary_storage();        
         platform_poll_events();
 
         if (is_key_down(&window->keyboard, KEY_ALT)) {

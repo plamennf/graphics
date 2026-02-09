@@ -1,6 +1,6 @@
 For corelib:
  - Add platform layer:
-    - Input: mouse, maybe gamepad
+    - Input: maybe gamepad
 
 For sandbox:
  - Add D3D12:

@@ -3,6 +3,7 @@
 #ifdef PLATFORM_WINDOWS
 
 #include <Windows.h>
+#include <Windowsx.h>
 
 struct Platform_Window_Windows : public Platform_Window {
     HWND hwnd;
@@ -78,6 +79,93 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
 
             Keyboard *keyboard = &window->keyboard;
             set_key_state(keyboard, key_code, is_down);
+        } break;
+
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP: {
+            Assert(window);
+
+            bool is_down = msg == WM_LBUTTONDOWN;
+
+            Mouse *mouse = &window->mouse;
+            set_mouse_button_state(mouse, MOUSE_BUTTON_LEFT, is_down);
+        } break;
+
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP: {
+            Assert(window);
+
+            bool is_down = msg == WM_RBUTTONDOWN;
+
+            Mouse *mouse = &window->mouse;
+            set_mouse_button_state(mouse, MOUSE_BUTTON_RIGHT, is_down);
+        } break;
+
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP: {
+            Assert(window);
+
+            bool is_down = msg == WM_MBUTTONDOWN;
+
+            Mouse *mouse = &window->mouse;
+            set_mouse_button_state(mouse, MOUSE_BUTTON_MIDDLE, is_down);
+        } break;
+
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP: {
+            Assert(window);
+            
+            int button = GET_XBUTTON_WPARAM(wparam);
+
+            Mouse_Button mouse_button;
+            if (button & XBUTTON1) {
+                mouse_button = MOUSE_BUTTON_X1;
+            } else if (button & XBUTTON2) {
+                mouse_button = MOUSE_BUTTON_X2;
+            } else {
+                Assert(!"Invalid mouse button");
+                mouse_button = (Mouse_Button)0;
+            }
+
+            bool is_down = msg == WM_XBUTTONDOWN;
+            
+            Mouse *mouse = &window->mouse;
+            set_mouse_button_state(mouse, mouse_button, is_down);
+            
+            return TRUE;
+        } break;
+
+        case WM_MOUSEMOVE: {
+            Assert(window);
+
+            int x_pos = GET_X_LPARAM(lparam);
+            int y_pos = GET_Y_LPARAM(lparam);
+
+            Mouse *mouse = &window->mouse;
+
+            mouse->cursor_x_delta = x_pos - mouse->cursor_x;
+            mouse->cursor_y_delta = mouse->cursor_y - y_pos;
+
+            mouse->cursor_x = x_pos;
+            mouse->cursor_y = window->height - y_pos;
+        } break;
+
+        case WM_MOUSEWHEEL: {
+            Assert(window);
+
+            int total_wheel_delta = GET_WHEEL_DELTA_WPARAM(wparam);
+
+            Mouse *mouse = &window->mouse;
+            mouse->scroll_wheel_y_delta = total_wheel_delta / WHEEL_DELTA; // 120
+        } break;
+
+        case WM_MOUSEHWHEEL: {
+            Assert(window);
+
+            int total_wheel_delta = GET_WHEEL_DELTA_WPARAM(wparam);
+
+            Mouse *mouse = &window->mouse;
+            mouse->scroll_wheel_x_delta = total_wheel_delta / WHEEL_DELTA; // 120
         } break;
             
         default: {
@@ -175,6 +263,13 @@ void platform_poll_events() {
     for (int i = 0; i < num_created_windows; i++) {
         Platform_Window *window = &created_windows[i];
         clear_key_states(&window->keyboard);
+        clear_mouse_button_states(&window->mouse);
+
+        window->mouse.cursor_x_delta = 0;
+        window->mouse.cursor_y_delta = 0;
+
+        window->mouse.scroll_wheel_x_delta = 0;
+        window->mouse.scroll_wheel_y_delta = 0;
     }
     
     MSG msg;

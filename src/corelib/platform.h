@@ -8,6 +8,7 @@ struct Platform_Window {
     bool is_open;
 
     Keyboard keyboard;
+    Mouse mouse;
 };
 
 void platform_init();

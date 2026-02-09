@@ -1,11 +1,6 @@
 #pragma once
 
 enum Key_Code {
-    LEFT_MOUSE_BUTTON   = 0x01,
-    RIGHT_MOUSE_BUTTON  = 0x02,
-    MIDDLE_MOUSE_BUTTON = 0x04,
-    X1_MOUSE_BUTTON     = 0x05,
-    X2_MOUSE_BUTTON     = 0x06,
     KEY_BACKSPACE       = 0x08,
     KEY_TAB             = 0x09,
     KEY_CLEAR           = 0x0C,
@@ -155,4 +150,14 @@ enum Key_Code {
     KEY_APOSTROPHE_DOUBLE_QUOTATION_MARK = 0xDE,
 
     NUM_KEY_CODES,
+};
+
+enum Mouse_Button {
+    MOUSE_BUTTON_LEFT   = 0x01,
+    MOUSE_BUTTON_RIGHT  = 0x02,
+    MOUSE_BUTTON_MIDDLE = 0x04,
+    MOUSE_BUTTON_X1     = 0x05,
+    MOUSE_BUTTON_X2     = 0x06,
+
+    NUM_MOUSE_BUTTONS,
 };

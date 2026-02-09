@@ -18,4 +18,5 @@
 
 #include "key_codes.h"
 #include "keyboard.h"
+#include "mouse.h"
 #include "platform.h"
