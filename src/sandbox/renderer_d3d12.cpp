@@ -140,6 +140,8 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
         srv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         hr = renderer->device->CreateDescriptorHeap(&srv_heap_desc, IID_PPV_ARGS(&renderer->srv_heap));
         AssertHR(hr);
+
+        renderer->srv_descriptor_size = renderer->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     }
 
     // Create frame resources.
@@ -268,9 +270,12 @@ void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer
                 
                 Gpu_Buffer_D3D12 *index_buffer = (Gpu_Buffer_D3D12 *)info.index_buffer;
 
+                Texture_D3D12 *texture = (Texture_D3D12 *)info.texture;
+                Assert(texture);
+                
                 renderer->command_list->SetPipelineState(shader->pipeline_state);
                 renderer->command_list->SetGraphicsRootSignature(shader->root_signature);
-                renderer->command_list->SetGraphicsRootDescriptorTable(0, renderer->srv_heap->GetGPUDescriptorHandleForHeapStart());
+                renderer->command_list->SetGraphicsRootDescriptorTable(0, texture->descriptor_handle);
                 
                 renderer->command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -364,7 +369,6 @@ Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
     ranges[0].RegisterSpace      = 0;
     ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    
     D3D12_ROOT_PARAMETER1 root_parameters[1] = {};
 
     root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -631,6 +635,7 @@ Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, in
     defer { SafeRelease(texture_upload_heap); };
 
     ID3D12Resource *texture = NULL;
+    D3D12_GPU_DESCRIPTOR_HANDLE texture_descriptor_handle = {};
 
     // Command list allocators can only be reset when the associated 
     // command lists have finished execution on the GPU; apps should use 
@@ -760,7 +765,10 @@ Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, in
         srv_desc.Texture2D.MipLevels = 1;
 
         // TODO: Get the srv_descriptor_size and keep track of how many textures were created and give the corresponding handle for the first free texture slot(in case some of the textures were freed).
-        renderer->device->CreateShaderResourceView(texture, &srv_desc, renderer->srv_heap->GetCPUDescriptorHandleForHeapStart());
+
+        D3D12_CPU_DESCRIPTOR_HANDLE texture_descriptor_handle = renderer->srv_heap->GetCPUDescriptorHandleForHeapStart();
+        texture_descriptor_handle.ptr += renderer->num_allocated_textures * renderer->srv_descriptor_size;
+        renderer->device->CreateShaderResourceView(texture, &srv_desc, texture_descriptor_handle);
     }
 
     renderer_d3d12_wait_for_gpu(renderer);
@@ -782,6 +790,10 @@ Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, in
     result->bpp    = bpp;
 
     result->resource = texture;
+    result->descriptor_handle = renderer->srv_heap->GetGPUDescriptorHandleForHeapStart();
+    result->descriptor_handle.ptr += renderer->num_allocated_textures * renderer->srv_descriptor_size;
 
+    renderer->num_allocated_textures++;
+    
     return result;
 }

@@ -48,7 +48,7 @@ int main(int argc, char *argv[]) {
     u8 white_texture_data[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
     Texture *texture = renderer_allocate_texture(renderer, 1, 1, TEXTURE_FORMAT_RGBA8, 4, white_texture_data);
 
-    texture = renderer_load_texture(renderer, "data/textures/Warehouse.png");
+    Texture *texture2 = renderer_load_texture(renderer, "data/textures/Warehouse.png");
     
     while (window->is_open) {
         reset_temporary_storage();        
@@ -72,6 +72,7 @@ int main(int argc, char *argv[]) {
 
         Draw_Item_Info draw_item_info;
         draw_item_info.shader        = shader;
+        draw_item_info.texture       = texture2;
         draw_item_info.vertex_buffer = vertex_buffer;
         draw_item_info.index_buffer  = index_buffer;
         draw_item_info.num_indices   = ArrayCount(quad_indices);

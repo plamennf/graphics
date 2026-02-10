@@ -37,10 +37,12 @@ struct Gpu_Buffer_D3D12 : public Gpu_Buffer {
 
 struct Texture_D3D12 : public Texture {
     ID3D12Resource *resource;
+    D3D12_GPU_DESCRIPTOR_HANDLE descriptor_handle;
 };
 
 struct Renderer_D3D12 : public Renderer {
     Memory_Arena gpu_resources_memory;
+    int num_allocated_textures;
     
     bool use_warp_device;
     
@@ -53,6 +55,7 @@ struct Renderer_D3D12 : public Renderer {
     ID3D12DescriptorHeap *srv_heap;
     ID3D12GraphicsCommandList *command_list;
     UINT rtv_descriptor_size;
+    UINT srv_descriptor_size;
 
     // Synchronization objects.
     UINT frame_index;

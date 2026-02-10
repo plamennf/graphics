@@ -69,6 +69,7 @@ struct Draw_Item_Info {
     Shader *shader;
     Gpu_Buffer *vertex_buffer;
     Gpu_Buffer *index_buffer;
+    Texture *texture;
     int num_indices;
     int first_index;
 };
