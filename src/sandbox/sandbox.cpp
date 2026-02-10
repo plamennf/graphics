@@ -4,7 +4,7 @@
 Global_Variables globals;
 
 int main(int argc, char *argv[]) {
-    init_temporary_storage(Kilobytes(40));
+    init_temporary_storage(Kilobytes(1));
     
     init_logging();
     defer { shutdown_logging(); };
@@ -12,11 +12,28 @@ int main(int argc, char *argv[]) {
     platform_init();
     defer { platform_shutdown(); };
 
-    ma_init(&globals.permanent_memory, Kilobytes(1));
+    ma_init(&globals.permanent_memory, Megabytes(4));
     
     Platform_Window *window = platform_window_create(0, 0, "Sandbox");
     Renderer *renderer = renderer_create(RENDER_API_D3D12, window, true);
     defer { renderer_shutdown(renderer); };
+
+    Shader_Info shader_info        = {};
+    shader_info.render_vertex_type = RENDER_VERTEX_TYPE_IMMEDIATE;
+    shader_info.filepath           = "data/shaders/basic.hlsl";
+    Shader *shader = renderer_load_shader(renderer, shader_info);
+
+    Immediate_Vertex quad_vertices[] = {
+        { { -0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 0.0f } },
+        { { +0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 0.0f } },
+        { { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
+
+        { { -0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 0.0f } },
+        { { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
+        { { -0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 1.0f } },
+    };
+
+    Gpu_Buffer *vertex_buffer = renderer_allocate_buffer(renderer, GPU_BUFFER_TYPE_VERTEX_BUFFER, sizeof(quad_vertices), sizeof(Immediate_Vertex), quad_vertices);
     
     while (window->is_open) {
         reset_temporary_storage();        
@@ -38,7 +55,15 @@ int main(int argc, char *argv[]) {
             window->is_open = false;
         }
 
-        renderer_execute_render_commands(renderer);
+        Draw_Item_Info draw_item_info;
+        draw_item_info.shader        = shader;
+        draw_item_info.vertex_buffer = vertex_buffer;
+        draw_item_info.index_buffer  = NULL;
+        draw_item_info.num_indices   = ArrayCount(quad_vertices);
+        draw_item_info.first_index   = 0;
+        renderer_draw_item(renderer, draw_item_info);
+        
+        renderer_execute_render_commands_and_present(renderer);
         renderer_move_to_next_frame(renderer);
     }
     

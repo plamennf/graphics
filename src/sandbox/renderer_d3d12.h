@@ -24,7 +24,19 @@ inline void print_hr(HRESULT hr) {
 
 #endif
 
+struct Shader_D3D12 : public Shader {
+    ID3D12RootSignature *root_signature;
+    ID3D12PipelineState *pipeline_state;
+};
+
+struct Gpu_Buffer_D3D12 : public Gpu_Buffer {
+    ID3D12Resource *resource;
+    D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view;
+};
+
 struct Renderer_D3D12 : public Renderer {
+    Memory_Arena gpu_resources_memory;
+    
     bool use_warp_device;
     
     IDXGISwapChain3 *swap_chain;
@@ -44,16 +56,14 @@ struct Renderer_D3D12 : public Renderer {
     
     D3D12_VIEWPORT viewport;
     D3D12_RECT scissor_rect;
-    ID3D12RootSignature *root_signature;
-    ID3D12PipelineState *pipeline_state;
-
-    ID3D12Resource *vertex_buffer;
-    D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view;
 };
 
 Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync);
 void renderer_d3d12_shutdown(Renderer_D3D12 *renderer);
 
-void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer);
+void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer);
 void renderer_d3d12_move_to_next_frame(Renderer_D3D12 *renderer);
 void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer);
+
+Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info);
+Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data);

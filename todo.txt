@@ -4,9 +4,9 @@ For corelib:
 
 For sandbox:
  - Add D3D12:
-     - Initialize device, swap chain, command queues, render targets and clear the render targets
-     - Add shaders and pipelines and draw a triangle with them
-     - Add vertex and index buffers and draw using them
+     - Add index buffers
+     - Add matrices to shader
+     - Add immediate drawing
      - Load cgltf models
      - Add imgui
      - Render the sponza scene

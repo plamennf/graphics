@@ -176,147 +176,6 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
         }
     }
 
-    // Create an empty root signature.
-    {
-        D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
-        root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
-        ID3DBlob *signature = NULL, *error = NULL;
-        defer { SafeRelease(signature); SafeRelease(error); };
-        
-        hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error);
-        AssertHR(hr);
-        
-        hr = renderer->device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&renderer->root_signature));
-        AssertHR(hr);
-    }
-
-    // Create the pipeline state, which includes compiling and loading shaders.
-    {
-        ID3DBlob *vertex_shader = NULL, *pixel_shader = NULL;
-        defer { SafeRelease(vertex_shader); SafeRelease(pixel_shader); };
-
-#ifdef BUILD_DEBUG
-        // Enable better shader debugging with the graphics debugging tools.
-        UINT compile_flags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
-#else
-        UINT compile_flags = 0;
-#endif
-
-        hr = D3DCompileFromFile(L"data/shaders/basic.hlsl", NULL, NULL, "vertex_main", "vs_5_0", compile_flags, 0, &vertex_shader, NULL);
-        AssertHR(hr);
-        
-        hr = D3DCompileFromFile(L"data/shaders/basic.hlsl", NULL, NULL, "pixel_main", "ps_5_0", compile_flags, 0, &pixel_shader, NULL);
-        AssertHR(hr);
-
-        // Define the vertex input layout.
-        D3D12_INPUT_ELEMENT_DESC ieds[] =
-        {
-            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-            { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
-        };
-
-        // Describe and create the graphics pipeline state object (PSO).
-        D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
-        pso_desc.InputLayout = { ieds, ArrayCount(ieds) };
-        pso_desc.pRootSignature = renderer->root_signature;
-        pso_desc.VS = {vertex_shader->GetBufferPointer(), vertex_shader->GetBufferSize()};
-        pso_desc.PS = {pixel_shader->GetBufferPointer(), pixel_shader->GetBufferSize()};
-        
-        pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-        pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-        pso_desc.RasterizerState.FrontCounterClockwise = FALSE;
-        pso_desc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
-        pso_desc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
-        pso_desc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
-        pso_desc.RasterizerState.DepthClipEnable = TRUE;
-        pso_desc.RasterizerState.MultisampleEnable = FALSE;
-        pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
-        pso_desc.RasterizerState.ForcedSampleCount = 0;
-        pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-        
-        pso_desc.BlendState.AlphaToCoverageEnable = FALSE;
-        pso_desc.BlendState.IndependentBlendEnable = FALSE;
-        pso_desc.BlendState.RenderTarget[0].BlendEnable = FALSE;
-        pso_desc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
-        pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
-        pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
-        pso_desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-        pso_desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-        pso_desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
-        pso_desc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        pso_desc.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
-        pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-        
-        pso_desc.DepthStencilState.DepthEnable = FALSE;
-        pso_desc.DepthStencilState.StencilEnable = FALSE;
-        pso_desc.SampleMask = UINT_MAX;
-        pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-        pso_desc.NumRenderTargets = 1;
-        pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-        pso_desc.SampleDesc.Count = 1;
-
-        hr = renderer->device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&renderer->pipeline_state));
-        AssertHR(hr);
-    }
-
-    // Create the vertex buffer.
-    {
-        float h = (float)window->height;
-        if (h < 1.0f) h = 1.0f;
-        float aspect_ratio = window->width / h;
-        
-        // Define the geometry for a triangle.
-        Vertex triangle_vertices[] =
-        {
-            { { 0.0f, 0.25f * aspect_ratio, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-            { { 0.25f, -0.25f * aspect_ratio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-            { { -0.25f, -0.25f * aspect_ratio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
-        };
-
-        const UINT vertex_buffer_size = sizeof(triangle_vertices);
-
-        D3D12_HEAP_PROPERTIES heap_properties = {};
-        heap_properties.Type = D3D12_HEAP_TYPE_UPLOAD;
-        heap_properties.CreationNodeMask = 1;
-        heap_properties.VisibleNodeMask = 1;
-
-        D3D12_RESOURCE_DESC resource_desc = {};
-        resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        resource_desc.Alignment = 0;
-        resource_desc.Width = vertex_buffer_size;
-        resource_desc.Height = 1;
-        resource_desc.DepthOrArraySize = 1;
-        resource_desc.MipLevels = 1;
-        resource_desc.Format = DXGI_FORMAT_UNKNOWN;
-        resource_desc.SampleDesc = { 1, 0 };
-        resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-        resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
-        
-        // Note: using upload heaps to transfer static data like vert buffers is not 
-        // recommended. Every time the GPU needs it, the upload heap will be marshalled 
-        // over. Please read up on Default Heap usage. An upload heap is used here for 
-        // code simplicity and because there are very few verts to actually transfer.
-        HRESULT hr = renderer->device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL, IID_PPV_ARGS(&renderer->vertex_buffer));
-        AssertHR(hr);
-
-        // Copy the triangle data to the vertex buffer.
-        UINT8 *vertex_data_begin;
-        D3D12_RANGE read_range = {}; // We do not intend to read from this resource on the CPU.
-
-        hr = renderer->vertex_buffer->Map(0, &read_range, (void**)&vertex_data_begin);
-        AssertHR(hr);
-        
-        memcpy(vertex_data_begin, triangle_vertices, sizeof(triangle_vertices));
-        
-        renderer->vertex_buffer->Unmap(0, NULL);
-
-        // Initialize the vertex buffer view.
-        renderer->vertex_buffer_view.BufferLocation = renderer->vertex_buffer->GetGPUVirtualAddress();
-        renderer->vertex_buffer_view.StrideInBytes  = sizeof(Vertex);
-        renderer->vertex_buffer_view.SizeInBytes    = vertex_buffer_size;
-    }
-
     renderer->viewport = {};
     renderer->viewport.Width    = (float)window->width;
     renderer->viewport.Height   = (float)window->height;
@@ -325,9 +184,17 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
     renderer->scissor_rect = {};
     renderer->scissor_rect.right  = window->width;
     renderer->scissor_rect.bottom = window->height;
+
+    renderer->max_push_buffer_size = Kilobytes(64);
+    renderer->push_buffer_base     = MaAllocArray(&globals.permanent_memory, u8, renderer->max_push_buffer_size);
+    renderer->push_buffer_data_at  = renderer->push_buffer_base;
+
+    renderer->gpu_resources_memory.size     = Kilobytes(128);
+    renderer->gpu_resources_memory.occupied = 0;
+    renderer->gpu_resources_memory.data     = MaAllocArray(&globals.permanent_memory, u8, renderer->gpu_resources_memory.size);
     
     renderer_d3d12_wait_for_gpu(renderer);
-    
+
     return renderer;
 }
 
@@ -337,7 +204,7 @@ void renderer_d3d12_shutdown(Renderer_D3D12 *renderer) {
     CloseHandle(renderer->fence_event);
 }
 
-void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer) {
+void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer) {
     // Command list allocators can only be reset when the associated 
     // command lists have finished execution on the GPU; apps should use 
     // fences to determine GPU execution progress.
@@ -347,10 +214,9 @@ void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer) {
     // However, when ExecuteCommandList() is called on a particular command 
     // list, that command list can then be reset at any time and must be before 
     // re-recording.
-    hr = renderer->command_list->Reset(renderer->command_allocators[renderer->frame_index], renderer->pipeline_state);
+    hr = renderer->command_list->Reset(renderer->command_allocators[renderer->frame_index], NULL);
     AssertHR(hr);
     
-    renderer->command_list->SetGraphicsRootSignature(renderer->root_signature);
     renderer->command_list->RSSetViewports(1, &renderer->viewport);
     renderer->command_list->RSSetScissorRects(1, &renderer->scissor_rect);
 
@@ -370,9 +236,30 @@ void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer) {
     renderer->command_list->OMSetRenderTargets(1, &rtv_handle, FALSE, NULL);
     float clear_color[] = { 0.0f, 0.2f, 0.4f, 1.0f };
     renderer->command_list->ClearRenderTargetView(rtv_handle, clear_color, 0, NULL);
-    renderer->command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    renderer->command_list->IASetVertexBuffers(0, 1, &renderer->vertex_buffer_view);
-    renderer->command_list->DrawInstanced(3, 1, 0, 0);
+
+    for (u8 *at = renderer->push_buffer_base; at < renderer->push_buffer_data_at;) {
+        Render_Entry_Type type = *(Render_Entry_Type *)at;
+        at++;
+
+        switch (type) {
+            case RET_Render_Entry_Draw_Item: {
+                auto entry = (Render_Entry_Draw_Item *)at;
+                at += sizeof(*entry);
+
+                Draw_Item_Info info = entry->info;
+
+                Shader_D3D12 *shader = (Shader_D3D12 *)info.shader;
+                Gpu_Buffer_D3D12 *vertex_buffer = (Gpu_Buffer_D3D12 *)info.vertex_buffer;
+
+                renderer->command_list->SetPipelineState(shader->pipeline_state);
+                renderer->command_list->SetGraphicsRootSignature(shader->root_signature);
+                
+                renderer->command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                renderer->command_list->IASetVertexBuffers(0, 1, &vertex_buffer->vertex_buffer_view);
+                renderer->command_list->DrawInstanced(info.num_indices, 1, info.first_index, 0);
+            } break;
+        }
+    }
     
     // Indicate that the back buffer will now be used to present.
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -391,6 +278,8 @@ void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer) {
     // Present the frame.
     hr = renderer->swap_chain->Present(1, 0);
     AssertHR(hr);
+
+    renderer->push_buffer_data_at = renderer->push_buffer_base;
 }
 
 void renderer_d3d12_move_to_next_frame(Renderer_D3D12 *renderer) {
@@ -425,4 +314,179 @@ void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer) {
 
     // Increment the fence value for the current frame.
     renderer->fence_values[renderer->frame_index]++;
+}
+
+Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
+    // Create an empty root signature.
+    D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
+    root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+    ID3DBlob *signature = NULL, *error = NULL;
+    defer { SafeRelease(signature); SafeRelease(error); };
+        
+    HRESULT hr = D3D12SerializeRootSignature(&root_signature_desc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error);
+    AssertHR(hr);
+
+    ID3D12RootSignature *root_signature = NULL;
+    hr = renderer->device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&root_signature));
+    AssertHR(hr);
+
+    // Create the pipeline state, which includes compiling and loading shaders.
+    ID3DBlob *vertex_shader = NULL, *pixel_shader = NULL;
+    defer { SafeRelease(vertex_shader); SafeRelease(pixel_shader); };
+
+#ifdef BUILD_DEBUG
+    // Enable better shader debugging with the graphics debugging tools.
+    UINT compile_flags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+#else
+    UINT compile_flags = 0;
+#endif
+
+    wchar_t wide_filepath[4096] = {};
+    MultiByteToWideChar(CP_UTF8, 0, info.filepath.data, info.filepath.length, wide_filepath, ArrayCount(wide_filepath));
+    for (wchar_t *at = wide_filepath; *at; at++) {
+        if (*at == L'/') {
+            *at = L'\\';
+        }
+    }
+    
+    hr = D3DCompileFromFile(wide_filepath, NULL, NULL, "vertex_main", "vs_5_0", compile_flags, 0, &vertex_shader, NULL);
+    AssertHR(hr);
+        
+    hr = D3DCompileFromFile(wide_filepath, NULL, NULL, "pixel_main", "ps_5_0", compile_flags, 0, &pixel_shader, NULL);
+    AssertHR(hr);
+
+    D3D12_INPUT_ELEMENT_DESC ieds[16] = {};
+    UINT num_ieds = 0;
+
+    switch (info.render_vertex_type) {
+        case RENDER_VERTEX_TYPE_IMMEDIATE: {
+            num_ieds = 3;
+            
+            ieds[0].SemanticName      = "POSITION";
+            ieds[0].Format            = DXGI_FORMAT_R32G32_FLOAT;
+            ieds[0].AlignedByteOffset = offsetof(Immediate_Vertex, position);
+            ieds[0].InputSlotClass    = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+
+            ieds[1].SemanticName      = "COLOR";
+            ieds[1].Format            = DXGI_FORMAT_R32G32B32A32_FLOAT;
+            ieds[1].AlignedByteOffset = offsetof(Immediate_Vertex, color);
+            ieds[1].InputSlotClass    = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+
+            ieds[2].SemanticName      = "TEXCOORD";
+            ieds[2].Format            = DXGI_FORMAT_R32G32_FLOAT;
+            ieds[2].AlignedByteOffset = offsetof(Immediate_Vertex, uv);
+            ieds[2].InputSlotClass    = D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA;
+        } break;
+    }
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pso_desc = {};
+    pso_desc.InputLayout    = { ieds, num_ieds };
+    pso_desc.pRootSignature = root_signature;
+    pso_desc.VS = {vertex_shader->GetBufferPointer(), vertex_shader->GetBufferSize()};
+    pso_desc.PS = {pixel_shader->GetBufferPointer(), pixel_shader->GetBufferSize()};
+        
+    pso_desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    pso_desc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+    pso_desc.RasterizerState.FrontCounterClockwise = TRUE;
+    pso_desc.RasterizerState.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
+    pso_desc.RasterizerState.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
+    pso_desc.RasterizerState.SlopeScaledDepthBias = D3D12_DEFAULT_SLOPE_SCALED_DEPTH_BIAS;
+    pso_desc.RasterizerState.DepthClipEnable = TRUE;
+    pso_desc.RasterizerState.MultisampleEnable = FALSE;
+    pso_desc.RasterizerState.AntialiasedLineEnable = FALSE;
+    pso_desc.RasterizerState.ForcedSampleCount = 0;
+    pso_desc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+        
+    pso_desc.BlendState.AlphaToCoverageEnable = FALSE;
+    pso_desc.BlendState.IndependentBlendEnable = FALSE;
+    pso_desc.BlendState.RenderTarget[0].BlendEnable = FALSE;
+    pso_desc.BlendState.RenderTarget[0].LogicOpEnable = FALSE;
+    pso_desc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+    pso_desc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
+    pso_desc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+    pso_desc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+    pso_desc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+    pso_desc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+    pso_desc.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
+    pso_desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        
+    pso_desc.DepthStencilState.DepthEnable = FALSE;
+    pso_desc.DepthStencilState.StencilEnable = FALSE;
+    pso_desc.SampleMask = UINT_MAX;
+    pso_desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    pso_desc.NumRenderTargets = 1;
+    pso_desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+    pso_desc.SampleDesc.Count = 1;
+
+    ID3D12PipelineState *pipeline_state = NULL;
+    hr = renderer->device->CreateGraphicsPipelineState(&pso_desc, IID_PPV_ARGS(&pipeline_state));
+    AssertHR(hr);
+
+    Shader_D3D12 *result   = MaAllocStruct(&renderer->gpu_resources_memory, Shader_D3D12);
+
+    result->info           = info;
+    result->root_signature = root_signature;
+    result->pipeline_state = pipeline_state;
+    
+    return result;
+}
+
+Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data) {
+    Assert(size);
+    
+    D3D12_HEAP_PROPERTIES heap_properties = {};
+    heap_properties.Type = D3D12_HEAP_TYPE_UPLOAD;
+    heap_properties.CreationNodeMask = 1;
+    heap_properties.VisibleNodeMask = 1;
+
+    D3D12_RESOURCE_DESC resource_desc = {};
+    resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    resource_desc.Alignment = 0;
+    resource_desc.Width = size;
+    resource_desc.Height = 1;
+    resource_desc.DepthOrArraySize = 1;
+    resource_desc.MipLevels = 1;
+    resource_desc.Format = DXGI_FORMAT_UNKNOWN;
+    resource_desc.SampleDesc = { 1, 0 };
+    resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+
+    // Note: using upload heaps to transfer static data like vert buffers is not 
+    // recommended. Every time the GPU needs it, the upload heap will be marshalled 
+    // over. Please read up on Default Heap usage. An upload heap is used here for 
+    // code simplicity and because there are very few verts to actually transfer.
+    ID3D12Resource *resource = NULL;
+    HRESULT hr = renderer->device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL, IID_PPV_ARGS(&resource));
+    AssertHR(hr);
+
+    if (initial_data) {
+        UINT8 *data_begin;
+        D3D12_RANGE read_range = {}; // We do not intend to read from this resource on the CPU.
+
+        hr = resource->Map(0, &read_range, (void **)&data_begin);
+        AssertHR(hr);
+
+        memcpy(data_begin, initial_data, size);
+
+        resource->Unmap(0, NULL);
+    }
+
+    D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view = {};    
+    if (type == GPU_BUFFER_TYPE_VERTEX_BUFFER) {
+        vertex_buffer_view.BufferLocation = resource->GetGPUVirtualAddress();
+        vertex_buffer_view.StrideInBytes  = stride;
+        vertex_buffer_view.SizeInBytes    = size;
+    }
+
+    Gpu_Buffer_D3D12 *result = MaAllocStruct(&renderer->gpu_resources_memory, Gpu_Buffer_D3D12);
+
+    result->type   = type;
+    result->size   = size;
+    result->stride = stride;
+
+    result->resource           = resource;
+    result->vertex_buffer_view = vertex_buffer_view;
+
+    return result;
 }
