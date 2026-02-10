@@ -65,6 +65,10 @@ struct Renderer_D3D12 : public Renderer {
     
     D3D12_VIEWPORT viewport;
     D3D12_RECT scissor_rect;
+
+    ID3D12Resource *per_scene_cb;
+    UINT8 *per_scene_cb_data;
+    D3D12_GPU_DESCRIPTOR_HANDLE per_scene_cb_descriptor_handle;
 };
 
 Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync);

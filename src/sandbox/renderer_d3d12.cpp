@@ -185,6 +185,51 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
         }
     }
 
+    //
+    // Create per scene constant buffer
+    //
+    {
+        D3D12_HEAP_PROPERTIES heap_properties = {};
+        heap_properties.Type = D3D12_HEAP_TYPE_UPLOAD;
+        heap_properties.CreationNodeMask = 1;
+        heap_properties.VisibleNodeMask = 1;
+
+        D3D12_RESOURCE_DESC resource_desc = {};
+        resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        resource_desc.Alignment = 0;
+        resource_desc.Width = sizeof(Per_Scene_Uniforms);
+        resource_desc.Height = 1;
+        resource_desc.DepthOrArraySize = 1;
+        resource_desc.MipLevels = 1;
+        resource_desc.Format = DXGI_FORMAT_UNKNOWN;
+        resource_desc.SampleDesc = { 1, 0 };
+        resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        
+        HRESULT hr = renderer->device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL, IID_PPV_ARGS(&renderer->per_scene_cb));
+        AssertHR(hr);
+
+        // Describe and create a constant buffer view.
+        D3D12_CONSTANT_BUFFER_VIEW_DESC cbv_desc = {};
+        cbv_desc.BufferLocation = renderer->per_scene_cb->GetGPUVirtualAddress();
+        cbv_desc.SizeInBytes = sizeof(Per_Scene_Uniforms);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE cpu_descriptor_handle = renderer->srv_heap->GetCPUDescriptorHandleForHeapStart();
+        cpu_descriptor_handle.ptr += renderer->srv_descriptor_size * renderer->num_allocated_textures;
+        renderer->device->CreateConstantBufferView(&cbv_desc, cpu_descriptor_handle);
+
+        // Map and initialize the constant buffer. We don't unmap this until the
+        // app closes. Keeping things mapped for the lifetime of the resource is okay.
+        D3D12_RANGE read_range = {};
+        hr = renderer->per_scene_cb->Map(0, &read_range, (void**)&renderer->per_scene_cb_data);
+        AssertHR(hr);
+
+        renderer->per_scene_cb_descriptor_handle = renderer->srv_heap->GetGPUDescriptorHandleForHeapStart();
+        renderer->per_scene_cb_descriptor_handle.ptr += renderer->num_allocated_textures * renderer->srv_descriptor_size;
+
+        renderer->num_allocated_textures += 1;
+    }
+
     renderer->viewport = {};
     renderer->viewport.Width    = (float)window->width;
     renderer->viewport.Height   = (float)window->height;
@@ -256,6 +301,13 @@ void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer
         at++;
 
         switch (type) {
+            case RET_Per_Scene_Uniforms: {
+                auto entry = (Per_Scene_Uniforms *)at;
+                at += sizeof(*entry);
+
+                memcpy(renderer->per_scene_cb_data, entry, sizeof(Per_Scene_Uniforms));
+            } break;
+            
             case RET_Render_Entry_Draw_Item: {
                 auto entry = (Render_Entry_Draw_Item *)at;
                 at += sizeof(*entry);
@@ -276,6 +328,7 @@ void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer
                 renderer->command_list->SetPipelineState(shader->pipeline_state);
                 renderer->command_list->SetGraphicsRootSignature(shader->root_signature);
                 renderer->command_list->SetGraphicsRootDescriptorTable(0, texture->descriptor_handle);
+                renderer->command_list->SetGraphicsRootDescriptorTable(1, renderer->per_scene_cb_descriptor_handle);
                 
                 renderer->command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -360,7 +413,7 @@ Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
     s64 mark = get_temporary_storage_mark();
     defer { set_temporary_storage_mark(mark); };
 
-    D3D12_DESCRIPTOR_RANGE1 ranges[1] = {};
+    D3D12_DESCRIPTOR_RANGE1 ranges[2] = {};
 
     ranges[0].RangeType      = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     ranges[0].NumDescriptors = 1;
@@ -369,12 +422,24 @@ Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
     ranges[0].RegisterSpace      = 0;
     ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER1 root_parameters[1] = {};
+    ranges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+    ranges[1].NumDescriptors = 1;
+    ranges[1].Flags          = D3D12_DESCRIPTOR_RANGE_FLAG_NONE;
+    ranges[1].BaseShaderRegister = 0;
+    ranges[1].RegisterSpace      = 0;
+    ranges[1].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    
+    D3D12_ROOT_PARAMETER1 root_parameters[2] = {};
 
     root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    root_parameters[0].DescriptorTable.NumDescriptorRanges = ArrayCount(ranges);
-    root_parameters[0].DescriptorTable.pDescriptorRanges   = ranges;
+    root_parameters[0].DescriptorTable.NumDescriptorRanges = 1;
+    root_parameters[0].DescriptorTable.pDescriptorRanges   = &ranges[0];
     root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+    root_parameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    root_parameters[1].DescriptorTable.NumDescriptorRanges = 1;
+    root_parameters[1].DescriptorTable.pDescriptorRanges   = &ranges[1];
+    root_parameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
     
     auto samplers = TAllocArray(D3D12_STATIC_SAMPLER_DESC, info.num_static_samplers);
 
@@ -429,7 +494,7 @@ Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
     root_signature_desc.Desc_1_1.NumStaticSamplers = info.num_static_samplers;
     root_signature_desc.Desc_1_1.pStaticSamplers   = samplers;
     root_signature_desc.Desc_1_1.Flags             = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
-
+    
     ID3DBlob *signature = NULL, *error = NULL;
     defer { SafeRelease(signature); SafeRelease(error); };
 

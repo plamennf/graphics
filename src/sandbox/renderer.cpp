@@ -111,6 +111,11 @@ inline void *add_render_entry_(Renderer *renderer, u32 size, Render_Entry_Type t
     return result;
 }
 
+void renderer_set_per_scene_uniforms(Renderer *renderer, Per_Scene_Uniforms uniforms) {
+    auto entry = add_render_entry(renderer, Per_Scene_Uniforms);
+    memcpy(entry, &uniforms, sizeof(uniforms));
+}
+
 void renderer_draw_item(Renderer *renderer, Draw_Item_Info info) {
     auto entry = add_render_entry(renderer, Render_Entry_Draw_Item);
     memcpy(&entry->info, &info, sizeof(info));

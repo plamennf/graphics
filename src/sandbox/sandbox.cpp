@@ -70,6 +70,11 @@ int main(int argc, char *argv[]) {
             window->is_open = false;
         }
 
+        Per_Scene_Uniforms per_scene_uniforms = {};
+        per_scene_uniforms.projection_matrix = make_orthographic(0.0f, (float)window->width, 0.0f, (float)window->height, -1.0f, 1.0f);
+        per_scene_uniforms.view_matrix = make_transformation_matrix(v3(window->width * 0.5f, window->height * 0.5f, 0), v3(0, 0, 0), v3((float)window->width, (float)window->height, 0));
+        renderer_set_per_scene_uniforms(renderer, per_scene_uniforms);
+
         Draw_Item_Info draw_item_info;
         draw_item_info.shader        = shader;
         draw_item_info.texture       = texture2;

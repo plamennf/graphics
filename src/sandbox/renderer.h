@@ -74,8 +74,15 @@ struct Draw_Item_Info {
     int first_index;
 };
 
+struct Per_Scene_Uniforms {
+    Matrix4 projection_matrix;
+    Matrix4 view_matrix;
+    float padding[32];
+};
+
 enum Render_Entry_Type : u8 {
     RET_Render_Entry_Draw_Item,
+    RET_Per_Scene_Uniforms,
 };
 
 struct Render_Entry_Draw_Item {
@@ -104,4 +111,5 @@ Gpu_Buffer *renderer_allocate_buffer(Renderer *renderer, Gpu_Buffer_Type type, u
 Texture *renderer_allocate_texture(Renderer *renderer, int width, int height, Texture_Format format, int bpp, void *pixels);
 Texture *renderer_load_texture(Renderer *renderer, String filepath);
 
+void renderer_set_per_scene_uniforms(Renderer *renderer, Per_Scene_Uniforms uniforms);
 void renderer_draw_item(Renderer *renderer, Draw_Item_Info info);

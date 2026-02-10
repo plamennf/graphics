@@ -1,3 +1,10 @@
+cbuffer Per_Scene_Uniforms : register(b0) {
+    row_major float4x4 projection_matrix;
+    row_major float4x4 view_matrix;
+    float padding[32];
+};
+
+
 struct Vertex_Input {
     float2 position : POSITION;
     float4 color : COLOR;
@@ -13,7 +20,7 @@ struct Vertex_Output {
 Vertex_Output vertex_main(Vertex_Input input) {
     Vertex_Output output;
 
-    output.position = float4(input.position, 0.0, 1.0);
+    output.position = mul(projection_matrix, mul(view_matrix, float4(input.position, 0.0, 1.0)));
     output.color    = input.color;
     output.uv       = input.uv;
 
