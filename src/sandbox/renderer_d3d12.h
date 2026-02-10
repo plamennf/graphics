@@ -30,7 +30,7 @@ struct Renderer_D3D12 : public Renderer {
     IDXGISwapChain3 *swap_chain;
     ID3D12Device *device;
     ID3D12Resource *back_buffers[NUM_FRAMES];
-    ID3D12CommandAllocator *command_allocator;
+    ID3D12CommandAllocator *command_allocators[NUM_FRAMES];
     ID3D12CommandQueue *command_queue;
     ID3D12DescriptorHeap *rtv_heap;
     ID3D12GraphicsCommandList *command_list;
@@ -40,7 +40,7 @@ struct Renderer_D3D12 : public Renderer {
     UINT frame_index;
     HANDLE fence_event;
     ID3D12Fence *fence;
-    UINT64 fence_value;
+    UINT64 fence_values[NUM_FRAMES];
     
     D3D12_VIEWPORT viewport;
     D3D12_RECT scissor_rect;
@@ -55,4 +55,5 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync);
 void renderer_d3d12_shutdown(Renderer_D3D12 *renderer);
 
 void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer);
-void renderer_d3d12_wait_for_previous_frame(Renderer_D3D12 *renderer);
+void renderer_d3d12_move_to_next_frame(Renderer_D3D12 *renderer);
+void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer);

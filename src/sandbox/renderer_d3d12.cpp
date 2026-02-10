@@ -139,7 +139,7 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
     {
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = renderer->rtv_heap->GetCPUDescriptorHandleForHeapStart();
 
-        // Create a RTV for each frame.
+        // Create a RTV and a command allocatr for each frame.
         for (UINT n = 0; n < Renderer::NUM_FRAMES; n++)
         {
             HRESULT hr = renderer->swap_chain->GetBuffer(n, IID_PPV_ARGS(&renderer->back_buffers[n]));
@@ -147,14 +147,14 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
             
             renderer->device->CreateRenderTargetView(renderer->back_buffers[n], NULL, rtv_handle);
             rtv_handle.ptr += renderer->rtv_descriptor_size;
+
+            hr = renderer->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&renderer->command_allocators[n]));
+            AssertHR(hr);
         }
     }
 
-    hr = renderer->device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&renderer->command_allocator));
-    AssertHR(hr);
-
     // Create the command list.
-    hr = renderer->device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, renderer->command_allocator, NULL, IID_PPV_ARGS(&renderer->command_list));
+    hr = renderer->device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, renderer->command_allocators[renderer->frame_index], NULL, IID_PPV_ARGS(&renderer->command_list));
     AssertHR(hr);
 
     // Command lists are created in the recording state, but there is nothing
@@ -167,7 +167,7 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
         hr = renderer->device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&renderer->fence));
         AssertHR(hr);
         
-        renderer->fence_value = 1;
+        renderer->fence_values[renderer->frame_index]++;
 
         // Create an event handle to use for frame synchronization.
         renderer->fence_event = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -326,13 +326,13 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
     renderer->scissor_rect.right  = window->width;
     renderer->scissor_rect.bottom = window->height;
     
-    renderer_d3d12_wait_for_previous_frame(renderer);
+    renderer_d3d12_wait_for_gpu(renderer);
     
     return renderer;
 }
 
 void renderer_d3d12_shutdown(Renderer_D3D12 *renderer) {
-    renderer_d3d12_wait_for_previous_frame(renderer);
+    renderer_d3d12_wait_for_gpu(renderer);
 
     CloseHandle(renderer->fence_event);
 }
@@ -341,13 +341,13 @@ void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer) {
     // Command list allocators can only be reset when the associated 
     // command lists have finished execution on the GPU; apps should use 
     // fences to determine GPU execution progress.
-    HRESULT hr = renderer->command_allocator->Reset();
+    HRESULT hr = renderer->command_allocators[renderer->frame_index]->Reset();
     AssertHR(hr);
 
     // However, when ExecuteCommandList() is called on a particular command 
     // list, that command list can then be reset at any time and must be before 
     // re-recording.
-    hr = renderer->command_list->Reset(renderer->command_allocator, renderer->pipeline_state);
+    hr = renderer->command_list->Reset(renderer->command_allocators[renderer->frame_index], renderer->pipeline_state);
     AssertHR(hr);
     
     renderer->command_list->SetGraphicsRootSignature(renderer->root_signature);
@@ -393,24 +393,36 @@ void renderer_d3d12_execute_render_commands(Renderer_D3D12 *renderer) {
     AssertHR(hr);
 }
 
-void renderer_d3d12_wait_for_previous_frame(Renderer_D3D12 *renderer) {
-    // WAITING FOR THE FRAME TO COMPLETE BEFORE CONTINUING IS NOT BEST PRACTICE.
-    // This is code implemented as such for simplicity. The D3D12HelloFrameBuffering
-    // sample illustrates how to use fences for efficient resource usage and to
-    // maximize GPU utilization.
-
-    // Signal and increment the fence value.
-    const UINT64 fence = renderer->fence_value;
-    HRESULT hr = renderer->command_queue->Signal(renderer->fence, fence);
+void renderer_d3d12_move_to_next_frame(Renderer_D3D12 *renderer) {
+    // Schedule a Signal command in the queue.
+    const UINT64 current_fence_value = renderer->fence_values[renderer->frame_index];
+    HRESULT hr = renderer->command_queue->Signal(renderer->fence, current_fence_value);
     AssertHR(hr);
-    renderer->fence_value++;
 
-    // Wait until the previous frame is finished.
-    if (renderer->fence->GetCompletedValue() < fence) {
-        HRESULT hr = renderer->fence->SetEventOnCompletion(fence, renderer->fence_event);
+    // Update the frame index.
+    renderer->frame_index = renderer->swap_chain->GetCurrentBackBufferIndex();
+
+    // If the next frame is not ready to be rendered yet, wait until it is ready.
+    if (renderer->fence->GetCompletedValue() < renderer->fence_values[renderer->frame_index]) {
+        hr = renderer->fence->SetEventOnCompletion(renderer->fence_values[renderer->frame_index], renderer->fence_event);
         AssertHR(hr);
-        WaitForSingleObject(renderer->fence_event, INFINITE);
+    
+        WaitForSingleObjectEx(renderer->fence_event, INFINITE, FALSE);
     }
 
-    renderer->frame_index = renderer->swap_chain->GetCurrentBackBufferIndex();
+    // Set the fence value for the next frame.
+    renderer->fence_values[renderer->frame_index] = current_fence_value + 1;
+}
+
+void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer) {
+    // Schedule a Signal command in the queue.
+    HRESULT hr = renderer->command_queue->Signal(renderer->fence, renderer->fence_values[renderer->frame_index]);
+    AssertHR(hr);
+
+    // Wait until the fence has been processed.
+    hr = renderer->fence->SetEventOnCompletion(renderer->fence_values[renderer->frame_index], renderer->fence_event);
+    WaitForSingleObjectEx(renderer->fence_event, INFINITE, FALSE);
+
+    // Increment the fence value for the current frame.
+    renderer->fence_values[renderer->frame_index]++;
 }

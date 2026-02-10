@@ -19,4 +19,5 @@ Renderer *renderer_create(Render_Api render_api, Platform_Window *window, bool v
 void renderer_shutdown(Renderer *renderer);
 
 void renderer_execute_render_commands(Renderer *renderer);
-void renderer_wait_for_previous_frame(Renderer *renderer);
+void renderer_move_to_next_frame(Renderer *renderer);
+void renderer_wait_for_gpu(Renderer *renderer);

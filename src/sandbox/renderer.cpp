@@ -35,10 +35,18 @@ void renderer_execute_render_commands(Renderer *renderer) {
     }
 }
 
-void renderer_wait_for_previous_frame(Renderer *renderer) {
+void renderer_move_to_next_frame(Renderer *renderer) {
     switch (renderer->api) {
         case RENDER_API_D3D12: {
-            renderer_d3d12_wait_for_previous_frame((Renderer_D3D12 *)renderer);
+            renderer_d3d12_move_to_next_frame((Renderer_D3D12 *)renderer);
+        } break;
+    }
+}
+
+void renderer_wait_for_gpu(Renderer *renderer) {
+    switch (renderer->api) {
+        case RENDER_API_D3D12: {
+            renderer_d3d12_wait_for_gpu((Renderer_D3D12 *)renderer);
         } break;
     }
 }

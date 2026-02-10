@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
         }
 
         renderer_execute_render_commands(renderer);
-        renderer_wait_for_previous_frame(renderer);
+        renderer_move_to_next_frame(renderer);
     }
     
     return 0;
