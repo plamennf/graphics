@@ -4,6 +4,7 @@
 
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include <d3dcompiler.h>
 
 #define SafeRelease(ptr) if (ptr) { ptr->Release(); ptr = NULL; }
 
@@ -32,7 +33,6 @@ struct Renderer_D3D12 : public Renderer {
     ID3D12CommandAllocator *command_allocator;
     ID3D12CommandQueue *command_queue;
     ID3D12DescriptorHeap *rtv_heap;
-    ID3D12PipelineState *pipeline_state;
     ID3D12GraphicsCommandList *command_list;
     UINT rtv_descriptor_size;
 
@@ -41,6 +41,14 @@ struct Renderer_D3D12 : public Renderer {
     HANDLE fence_event;
     ID3D12Fence *fence;
     UINT64 fence_value;
+    
+    D3D12_VIEWPORT viewport;
+    D3D12_RECT scissor_rect;
+    ID3D12RootSignature *root_signature;
+    ID3D12PipelineState *pipeline_state;
+
+    ID3D12Resource *vertex_buffer;
+    D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view;
 };
 
 Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync);

@@ -85,6 +85,7 @@ project "sandbox"
             "winmm.lib",
             "d3d12.lib",
             "dxgi.lib",
+            "d3dcompiler.lib",
         }
 
     filter "configurations:Debug"

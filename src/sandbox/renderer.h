@@ -1,5 +1,10 @@
 #pragma once
 
+struct Vertex {
+    Vector3 position;
+    Vector4 color;
+};
+
 enum Render_Api {
     RENDER_API_D3D12,
 };
