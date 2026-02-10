@@ -32,6 +32,11 @@ struct Shader_D3D12 : public Shader {
 struct Gpu_Buffer_D3D12 : public Gpu_Buffer {
     ID3D12Resource *resource;
     D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view;
+    D3D12_INDEX_BUFFER_VIEW index_buffer_view;
+};
+
+struct Texture_D3D12 : public Texture {
+    ID3D12Resource *resource;
 };
 
 struct Renderer_D3D12 : public Renderer {
@@ -45,6 +50,7 @@ struct Renderer_D3D12 : public Renderer {
     ID3D12CommandAllocator *command_allocators[NUM_FRAMES];
     ID3D12CommandQueue *command_queue;
     ID3D12DescriptorHeap *rtv_heap;
+    ID3D12DescriptorHeap *srv_heap;
     ID3D12GraphicsCommandList *command_list;
     UINT rtv_descriptor_size;
 
@@ -67,3 +73,4 @@ void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer);
 
 Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info);
 Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data);
+Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, int height, Texture_Format format, int bpp, void *pixels);

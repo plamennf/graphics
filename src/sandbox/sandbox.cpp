@@ -18,9 +18,13 @@ int main(int argc, char *argv[]) {
     Renderer *renderer = renderer_create(RENDER_API_D3D12, window, true);
     defer { renderer_shutdown(renderer); };
 
-    Shader_Info shader_info        = {};
-    shader_info.render_vertex_type = RENDER_VERTEX_TYPE_IMMEDIATE;
-    shader_info.filepath           = "data/shaders/basic.hlsl";
+    Sampler_Info static_sampler = {TEXTURE_FILTER_LINEAR, TEXTURE_WRAP_REPEAT};
+    
+    Shader_Info shader_info         = {};
+    shader_info.render_vertex_type  = RENDER_VERTEX_TYPE_IMMEDIATE;
+    shader_info.filepath            = "data/shaders/basic.hlsl";
+    shader_info.num_static_samplers = 1;
+    shader_info.static_samplers     = &static_sampler;
     Shader *shader = renderer_load_shader(renderer, shader_info);
 
     Immediate_Vertex quad_vertices[] = {
@@ -28,12 +32,23 @@ int main(int argc, char *argv[]) {
         { { +0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 0.0f } },
         { { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
 
-        { { -0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 0.0f } },
-        { { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
+        //{ { -0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 0.0f } },
+        //{ { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
         { { -0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 1.0f } },
     };
 
+    u32 quad_indices[] = {
+        0, 1, 2,
+        0, 2, 3
+    };
+
     Gpu_Buffer *vertex_buffer = renderer_allocate_buffer(renderer, GPU_BUFFER_TYPE_VERTEX_BUFFER, sizeof(quad_vertices), sizeof(Immediate_Vertex), quad_vertices);
+    Gpu_Buffer *index_buffer = renderer_allocate_buffer(renderer, GPU_BUFFER_TYPE_INDEX_BUFFER, sizeof(quad_indices), sizeof(u32), quad_indices);
+
+    u8 white_texture_data[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+    Texture *texture = renderer_allocate_texture(renderer, 1, 1, TEXTURE_FORMAT_RGBA8, 4, white_texture_data);
+
+    texture = renderer_load_texture(renderer, "data/textures/Warehouse.png");
     
     while (window->is_open) {
         reset_temporary_storage();        
@@ -58,8 +73,8 @@ int main(int argc, char *argv[]) {
         Draw_Item_Info draw_item_info;
         draw_item_info.shader        = shader;
         draw_item_info.vertex_buffer = vertex_buffer;
-        draw_item_info.index_buffer  = NULL;
-        draw_item_info.num_indices   = ArrayCount(quad_vertices);
+        draw_item_info.index_buffer  = index_buffer;
+        draw_item_info.num_indices   = ArrayCount(quad_indices);
         draw_item_info.first_index   = 0;
         renderer_draw_item(renderer, draw_item_info);
         

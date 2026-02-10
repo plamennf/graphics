@@ -4,6 +4,9 @@
 #include "renderer_d3d12.h"
 #endif
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 Renderer *renderer_create(Render_Api render_api, Platform_Window *window, bool vsync) {
     switch (render_api) {
 #ifdef PLATFORM_WINDOWS
@@ -69,6 +72,30 @@ Gpu_Buffer *renderer_allocate_buffer(Renderer *renderer, Gpu_Buffer_Type type, u
     }
 
     return NULL;
+}
+
+Texture *renderer_allocate_texture(Renderer *renderer, int width, int height, Texture_Format format, int bpp, void *pixels) {
+    switch (renderer->api) {
+        case RENDER_API_D3D12: {
+            return renderer_d3d12_allocate_texture((Renderer_D3D12 *)renderer, width, height, format, bpp, pixels);
+        } break;
+    }
+
+    return NULL;
+}
+
+Texture *renderer_load_texture(Renderer *renderer, String filepath) {
+    int width, height, channels;
+    stbi_set_flip_vertically_on_load(1);
+    stbi_uc *data = stbi_load(temp_c_string(filepath), &width, &height, &channels, 4);
+    if (!data) {
+        logprintf("Failed to load image '%s'\n", filepath);
+        return NULL;
+    }
+    defer { stbi_image_free(data); };
+
+    Texture *result = renderer_allocate_texture(renderer, width, height, TEXTURE_FORMAT_RGBA8, 4, data);
+    return result;
 }
 
 #define add_render_entry(renderer, Type) (Type *)add_render_entry_(renderer, sizeof(Type), RET_##Type)

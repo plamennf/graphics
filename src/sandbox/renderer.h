@@ -14,9 +14,27 @@ struct Immediate_Vertex {
     Vector2 uv;
 };
 
+enum Texture_Filter {
+    TEXTURE_FILTER_POINT,
+    TEXTURE_FILTER_LINEAR,
+};
+
+enum Texture_Wrap {
+    TEXTURE_WRAP_REPEAT,
+    TEXTURE_WRAP_CLAMP,
+};
+
+struct Sampler_Info {
+    Texture_Filter filter;
+    Texture_Wrap wrap;
+};
+
 struct Shader_Info {
     Render_Vertex_Type render_vertex_type;
     String filepath;
+
+    int num_static_samplers;
+    Sampler_Info *static_samplers;
 };
 
 struct Shader {
@@ -25,12 +43,26 @@ struct Shader {
 
 enum Gpu_Buffer_Type {
     GPU_BUFFER_TYPE_VERTEX_BUFFER,
+    GPU_BUFFER_TYPE_INDEX_BUFFER,
 };
 
 struct Gpu_Buffer {
     Gpu_Buffer_Type type;
     u32 size;
     u32 stride;
+};
+
+enum Texture_Format {
+    TEXTURE_FORMAT_UNKNOWN,
+    TEXTURE_FORMAT_RGBA8,
+};
+
+struct Texture {
+    int width;
+    int height;
+
+    int bpp;
+    Texture_Format format;
 };
 
 struct Draw_Item_Info {
@@ -68,5 +100,7 @@ void renderer_wait_for_gpu(Renderer *renderer);
 
 Shader *renderer_load_shader(Renderer *renderer, Shader_Info info);
 Gpu_Buffer *renderer_allocate_buffer(Renderer *renderer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data);
+Texture *renderer_allocate_texture(Renderer *renderer, int width, int height, Texture_Format format, int bpp, void *pixels);
+Texture *renderer_load_texture(Renderer *renderer, String filepath);
 
 void renderer_draw_item(Renderer *renderer, Draw_Item_Info info);

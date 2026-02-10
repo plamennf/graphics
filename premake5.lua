@@ -62,7 +62,8 @@ project "sandbox"
 	pchsource "src/sandbox/make_pch.cpp"
 
     includedirs {
-        "%{wks.location}/src"
+        "%{wks.location}/src",
+        "%{wks.location}/external/include",
     }
 
     links {

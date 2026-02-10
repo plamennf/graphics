@@ -133,6 +133,13 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
         AssertHR(hr);
 
         renderer->rtv_descriptor_size = renderer->device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+        D3D12_DESCRIPTOR_HEAP_DESC srv_heap_desc = {};
+        srv_heap_desc.NumDescriptors = 100000; // 100 000
+        srv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        srv_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        hr = renderer->device->CreateDescriptorHeap(&srv_heap_desc, IID_PPV_ARGS(&renderer->srv_heap));
+        AssertHR(hr);
     }
 
     // Create frame resources.
@@ -237,6 +244,11 @@ void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer
     float clear_color[] = { 0.0f, 0.2f, 0.4f, 1.0f };
     renderer->command_list->ClearRenderTargetView(rtv_handle, clear_color, 0, NULL);
 
+    ID3D12DescriptorHeap *descriptor_heaps[] = {
+        renderer->srv_heap,
+    };
+    renderer->command_list->SetDescriptorHeaps(ArrayCount(descriptor_heaps), descriptor_heaps);
+    
     for (u8 *at = renderer->push_buffer_base; at < renderer->push_buffer_data_at;) {
         Render_Entry_Type type = *(Render_Entry_Type *)at;
         at++;
@@ -249,14 +261,26 @@ void renderer_d3d12_execute_render_commands_and_present(Renderer_D3D12 *renderer
                 Draw_Item_Info info = entry->info;
 
                 Shader_D3D12 *shader = (Shader_D3D12 *)info.shader;
+                Assert(shader);
+                
                 Gpu_Buffer_D3D12 *vertex_buffer = (Gpu_Buffer_D3D12 *)info.vertex_buffer;
+                Assert(vertex_buffer);
+                
+                Gpu_Buffer_D3D12 *index_buffer = (Gpu_Buffer_D3D12 *)info.index_buffer;
 
                 renderer->command_list->SetPipelineState(shader->pipeline_state);
                 renderer->command_list->SetGraphicsRootSignature(shader->root_signature);
+                renderer->command_list->SetGraphicsRootDescriptorTable(0, renderer->srv_heap->GetGPUDescriptorHandleForHeapStart());
                 
                 renderer->command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
                 renderer->command_list->IASetVertexBuffers(0, 1, &vertex_buffer->vertex_buffer_view);
-                renderer->command_list->DrawInstanced(info.num_indices, 1, info.first_index, 0);
+                if (index_buffer) {
+                    renderer->command_list->IASetIndexBuffer(&index_buffer->index_buffer_view);
+                    renderer->command_list->DrawIndexedInstanced(info.num_indices, 1, info.first_index, 0, 0);
+                } else {
+                    renderer->command_list->DrawInstanced(info.num_indices, 1, info.first_index, 0);
+                }
             } break;
         }
     }
@@ -317,7 +341,103 @@ void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer) {
 }
 
 Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
-    // Create an empty root signature.
+#if 1
+
+    D3D12_FEATURE_DATA_ROOT_SIGNATURE feature_data = {};
+
+    // This is the highest version the sample supports. If CheckFeatureSupport succeeds, the HighestVersion returned will not be greater than this.
+    feature_data.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_1;
+
+    if (FAILED(renderer->device->CheckFeatureSupport(D3D12_FEATURE_ROOT_SIGNATURE, &feature_data, sizeof(feature_data)))) {
+        feature_data.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
+    }
+
+    s64 mark = get_temporary_storage_mark();
+    defer { set_temporary_storage_mark(mark); };
+
+    D3D12_DESCRIPTOR_RANGE1 ranges[1] = {};
+
+    ranges[0].RangeType      = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    ranges[0].NumDescriptors = 1;
+    ranges[0].Flags          = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
+    ranges[0].BaseShaderRegister = 0;
+    ranges[0].RegisterSpace      = 0;
+    ranges[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    
+    D3D12_ROOT_PARAMETER1 root_parameters[1] = {};
+
+    root_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    root_parameters[0].DescriptorTable.NumDescriptorRanges = ArrayCount(ranges);
+    root_parameters[0].DescriptorTable.pDescriptorRanges   = ranges;
+    root_parameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    
+    auto samplers = TAllocArray(D3D12_STATIC_SAMPLER_DESC, info.num_static_samplers);
+
+    for (int i = 0; i < info.num_static_samplers; i++) {
+        D3D12_STATIC_SAMPLER_DESC sampler = {};
+
+        switch (info.static_samplers[i].filter) {
+            case TEXTURE_FILTER_POINT: {
+                sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+            } break;
+
+            case TEXTURE_FILTER_LINEAR: {
+                sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+            } break;
+        }
+
+        switch (info.static_samplers[i].wrap) {
+            case TEXTURE_WRAP_REPEAT: {
+                sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+                sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+                sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+            } break;
+
+            case TEXTURE_WRAP_CLAMP: {
+                sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+                sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+                sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+            } break;
+        }
+        
+        sampler.MipLODBias = 0;
+        sampler.MaxAnisotropy = 0;
+        sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+        sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+        sampler.MinLOD = 0.0f;
+        sampler.MaxLOD = D3D12_FLOAT32_MAX;
+        sampler.ShaderRegister = 0;
+        sampler.RegisterSpace = 0;
+        sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+        samplers[i] = sampler;
+    }
+
+    // TODO: If Root Signature Version 1.1 is not supported, we need to create
+    // a Root Signature Version 1.0 one.
+    
+    D3D12_VERSIONED_ROOT_SIGNATURE_DESC root_signature_desc;
+
+    root_signature_desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;
+    root_signature_desc.Desc_1_1.NumParameters     = ArrayCount(root_parameters);
+    root_signature_desc.Desc_1_1.pParameters       = root_parameters;
+    root_signature_desc.Desc_1_1.NumStaticSamplers = info.num_static_samplers;
+    root_signature_desc.Desc_1_1.pStaticSamplers   = samplers;
+    root_signature_desc.Desc_1_1.Flags             = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+    ID3DBlob *signature = NULL, *error = NULL;
+    defer { SafeRelease(signature); SafeRelease(error); };
+
+    HRESULT hr = D3D12SerializeVersionedRootSignature(&root_signature_desc, &signature, &error);
+    AssertHR(hr);
+
+    ID3D12RootSignature *root_signature = NULL;
+    hr = renderer->device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&root_signature));
+    AssertHR(hr);
+    
+#else
+// Create an empty root signature.
     D3D12_ROOT_SIGNATURE_DESC root_signature_desc = {};
     root_signature_desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
@@ -330,6 +450,7 @@ Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info) {
     ID3D12RootSignature *root_signature = NULL;
     hr = renderer->device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&root_signature));
     AssertHR(hr);
+#endif
 
     // Create the pipeline state, which includes compiling and loading shaders.
     ID3DBlob *vertex_shader = NULL, *pixel_shader = NULL;
@@ -472,13 +593,22 @@ Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_
         resource->Unmap(0, NULL);
     }
 
-    D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view = {};    
-    if (type == GPU_BUFFER_TYPE_VERTEX_BUFFER) {
-        vertex_buffer_view.BufferLocation = resource->GetGPUVirtualAddress();
-        vertex_buffer_view.StrideInBytes  = stride;
-        vertex_buffer_view.SizeInBytes    = size;
-    }
+    D3D12_VERTEX_BUFFER_VIEW vertex_buffer_view = {};
+    D3D12_INDEX_BUFFER_VIEW index_buffer_view = {};
+    switch (type) {
+        case GPU_BUFFER_TYPE_VERTEX_BUFFER: {
+            vertex_buffer_view.BufferLocation = resource->GetGPUVirtualAddress();
+            vertex_buffer_view.StrideInBytes  = stride;
+            vertex_buffer_view.SizeInBytes    = size;
+        } break;
 
+        case GPU_BUFFER_TYPE_INDEX_BUFFER: {
+            index_buffer_view.BufferLocation = resource->GetGPUVirtualAddress();
+            index_buffer_view.SizeInBytes    = size;
+            index_buffer_view.Format         = DXGI_FORMAT_R32_UINT;
+        } break;
+    }
+    
     Gpu_Buffer_D3D12 *result = MaAllocStruct(&renderer->gpu_resources_memory, Gpu_Buffer_D3D12);
 
     result->type   = type;
@@ -487,6 +617,171 @@ Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_
 
     result->resource           = resource;
     result->vertex_buffer_view = vertex_buffer_view;
+    result->index_buffer_view  = index_buffer_view;
+
+    return result;
+}
+
+Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, int height, Texture_Format format, int bpp, void *pixels) {
+    // Note: ComPtr's are CPU objects but this resource needs to stay in scope until
+    // the command list that references it has finished executing on the GPU.
+    // We will flush the GPU at the end of this method to ensure the resource is not
+    // prematurely destroyed.
+    ID3D12Resource *texture_upload_heap;
+    defer { SafeRelease(texture_upload_heap); };
+
+    ID3D12Resource *texture = NULL;
+
+    // Command list allocators can only be reset when the associated 
+    // command lists have finished execution on the GPU; apps should use 
+    // fences to determine GPU execution progress.
+    HRESULT hr = renderer->command_allocators[renderer->frame_index]->Reset();
+    AssertHR(hr);
+
+    // However, when ExecuteCommandList() is called on a particular command 
+    // list, that command list can then be reset at any time and must be before 
+    // re-recording.
+    hr = renderer->command_list->Reset(renderer->command_allocators[renderer->frame_index], NULL);
+    AssertHR(hr);
+    
+    // Create the texture.
+    {
+        // Describe and create a Texture2D.
+        D3D12_RESOURCE_DESC texture_desc = {};
+        texture_desc.MipLevels = 1;
+
+        switch (format) {
+            case TEXTURE_FORMAT_RGBA8: {
+                texture_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            } break;
+        }
+
+        texture_desc.Width = width;
+        texture_desc.Height = height;
+        texture_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        texture_desc.DepthOrArraySize = 1;
+        texture_desc.SampleDesc.Count = 1;
+        texture_desc.SampleDesc.Quality = 0;
+        texture_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+
+        D3D12_HEAP_PROPERTIES heap_properties = {};
+        heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        heap_properties.CreationNodeMask = 1;
+        heap_properties.VisibleNodeMask = 1;
+        
+        HRESULT hr = renderer->device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &texture_desc, D3D12_RESOURCE_STATE_COPY_DEST, NULL, IID_PPV_ARGS(&texture));
+        AssertHR(hr);
+
+        UINT64 required_size = 0;
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout = {};
+        UINT num_rows = 0;
+        UINT64 row_sizes = 0;
+
+        renderer->device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &layout, &num_rows, &row_sizes, &required_size);
+
+        const UINT64 upload_buffer_size = required_size;
+        
+        heap_properties.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+        D3D12_RESOURCE_DESC resource_desc = {};
+        resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        resource_desc.Alignment = 0;
+        resource_desc.Width = upload_buffer_size;
+        resource_desc.Height = 1;
+        resource_desc.DepthOrArraySize = 1;
+        resource_desc.MipLevels = 1;
+        resource_desc.Format = DXGI_FORMAT_UNKNOWN;
+        resource_desc.SampleDesc = { 1, 0 };
+        resource_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+        
+        // Create the GPU upload buffer.
+        hr = renderer->device->CreateCommittedResource(&heap_properties,  D3D12_HEAP_FLAG_NONE, &resource_desc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL, IID_PPV_ARGS(&texture_upload_heap));
+        AssertHR(hr);
+
+        // Copy data to the intermediate upload heap and then schedule a copy 
+        // from the upload heap to the Texture2D.
+
+        D3D12_SUBRESOURCE_DATA texture_data = {};
+        texture_data.pData = pixels;
+        texture_data.RowPitch = width * bpp;
+        texture_data.SlicePitch = texture_data.RowPitch * height;
+
+        //UpdateSubresources(m_commandList.Get(), m_texture.Get(), textureUploadHeap.Get(), 0, 0, 1, &textureData);
+
+        {
+            UINT8 *mapped_data;
+            D3D12_RANGE read_range = {};
+
+            hr = texture_upload_heap->Map(0, &read_range, (void **)&mapped_data);
+            AssertHR(hr);
+
+            {
+                UINT8 *dest   = mapped_data + layout.Offset;
+                UINT8 *source = (UINT8 *)texture_data.pData;
+
+                for (UINT row = 0; row < num_rows; row++) {
+                    memcpy(dest + row * layout.Footprint.RowPitch, source + row * texture_data.RowPitch, row_sizes);
+                }
+            }
+                
+            texture_upload_heap->Unmap(0, NULL);
+
+            {
+                D3D12_TEXTURE_COPY_LOCATION dest = {};
+                dest.pResource        = texture;
+                dest.Type             = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                dest.SubresourceIndex = 0;
+
+                D3D12_TEXTURE_COPY_LOCATION source = {};
+                source.pResource       = texture_upload_heap;
+                source.Type            = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                source.PlacedFootprint = layout;
+
+                renderer->command_list->CopyTextureRegion(&dest, 0, 0, 0, &source, NULL);
+            }
+        }
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type  = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        //barrier.Flags = ;
+        barrier.Transition.pResource   = texture;
+        barrier.Transition.Subresource = 0;
+        barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        barrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        
+        renderer->command_list->ResourceBarrier(1, &barrier);
+
+        // Describe and create a SRV for the texture.
+        D3D12_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+        srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        srv_desc.Format = texture_desc.Format;
+        srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srv_desc.Texture2D.MipLevels = 1;
+
+        // TODO: Get the srv_descriptor_size and keep track of how many textures were created and give the corresponding handle for the first free texture slot(in case some of the textures were freed).
+        renderer->device->CreateShaderResourceView(texture, &srv_desc, renderer->srv_heap->GetCPUDescriptorHandleForHeapStart());
+    }
+
+    renderer_d3d12_wait_for_gpu(renderer);
+    
+    // Close the command list and execute it to begin the initial GPU setup.
+    hr = renderer->command_list->Close();
+    AssertHR(hr);
+    
+    ID3D12CommandList *command_lists[] = { renderer->command_list };
+    renderer->command_queue->ExecuteCommandLists(ArrayCount(command_lists), command_lists);
+
+    renderer_d3d12_wait_for_gpu(renderer);
+    
+    auto result = MaAllocStruct(&renderer->gpu_resources_memory, Texture_D3D12);
+
+    result->width  = width;
+    result->height = height;
+    result->format = format;
+    result->bpp    = bpp;
+
+    result->resource = texture;
 
     return result;
 }
