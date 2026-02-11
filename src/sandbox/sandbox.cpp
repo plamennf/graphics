@@ -17,6 +17,7 @@ int main(int argc, char *argv[]) {
     Platform_Window *window = platform_window_create(0, 0, "Sandbox");
     Renderer *renderer = renderer_create(RENDER_API_D3D12, window, true);
     defer { renderer_shutdown(renderer); };
+    init_immediate_rendering(renderer);
 
     Sampler_Info static_sampler = {TEXTURE_FILTER_LINEAR, TEXTURE_WRAP_REPEAT};
     
@@ -25,25 +26,7 @@ int main(int argc, char *argv[]) {
     shader_info.filepath            = "data/shaders/basic.hlsl";
     shader_info.num_static_samplers = 1;
     shader_info.static_samplers     = &static_sampler;
-    Shader *shader = renderer_load_shader(renderer, shader_info);
-
-    Immediate_Vertex quad_vertices[] = {
-        { { -0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 0.0f } },
-        { { +0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 0.0f } },
-        { { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
-
-        //{ { -0.5f, -0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 0.0f } },
-        //{ { +0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 1.0f, 1.0f } },
-        { { -0.5f, +0.5f }, { 1.0f, 0.5f, 0.2f, 1.0f }, { 0.0f, 1.0f } },
-    };
-
-    u32 quad_indices[] = {
-        0, 1, 2,
-        0, 2, 3
-    };
-
-    Gpu_Buffer *vertex_buffer = renderer_allocate_buffer(renderer, GPU_BUFFER_TYPE_VERTEX_BUFFER, sizeof(quad_vertices), sizeof(Immediate_Vertex), quad_vertices);
-    Gpu_Buffer *index_buffer = renderer_allocate_buffer(renderer, GPU_BUFFER_TYPE_INDEX_BUFFER, sizeof(quad_indices), sizeof(u32), quad_indices);
+    globals.shader_quad = renderer_load_shader(renderer, shader_info);
 
     u8 white_texture_data[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
     Texture *texture = renderer_allocate_texture(renderer, 1, 1, TEXTURE_FORMAT_RGBA8, 4, white_texture_data);
@@ -72,17 +55,13 @@ int main(int argc, char *argv[]) {
 
         Per_Scene_Uniforms per_scene_uniforms = {};
         per_scene_uniforms.projection_matrix = make_orthographic(0.0f, (float)window->width, 0.0f, (float)window->height, -1.0f, 1.0f);
-        per_scene_uniforms.view_matrix = make_transformation_matrix(v3(window->width * 0.5f, window->height * 0.5f, 0), v3(0, 0, 0), v3((float)window->width, (float)window->height, 0));
+        per_scene_uniforms.view_matrix = matrix4_identity();
         renderer_set_per_scene_uniforms(renderer, per_scene_uniforms);
 
-        Draw_Item_Info draw_item_info;
-        draw_item_info.shader        = shader;
-        draw_item_info.texture       = texture2;
-        draw_item_info.vertex_buffer = vertex_buffer;
-        draw_item_info.index_buffer  = index_buffer;
-        draw_item_info.num_indices   = ArrayCount(quad_indices);
-        draw_item_info.first_index   = 0;
-        renderer_draw_item(renderer, draw_item_info);
+        immediate_begin(renderer);
+        immediate_quad(renderer, texture, v2(50, 50), v2(64, 64), v4(1, 0.5f, 0.2f, 1));
+        immediate_quad(renderer, texture2, v2(500, 500), v2(128, 128), v4(1, 1, 1, 1));
+        immediate_flush(renderer);
         
         renderer_execute_render_commands_and_present(renderer);
         renderer_move_to_next_frame(renderer);

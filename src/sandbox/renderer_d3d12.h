@@ -80,4 +80,5 @@ void renderer_d3d12_wait_for_gpu(Renderer_D3D12 *renderer);
 
 Shader *renderer_d3d12_load_shader(Renderer_D3D12 *renderer, Shader_Info info);
 Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data);
+void renderer_d3d12_update_entire_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_D3D12 *buffer, u32 size, void *data);
 Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, int height, Texture_Format format, int bpp, void *pixels);

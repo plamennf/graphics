@@ -108,8 +108,16 @@ void renderer_wait_for_gpu(Renderer *renderer);
 
 Shader *renderer_load_shader(Renderer *renderer, Shader_Info info);
 Gpu_Buffer *renderer_allocate_buffer(Renderer *renderer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data);
+void renderer_update_entire_buffer(Renderer *renderer, Gpu_Buffer *buffer, u32 size, void *data);
 Texture *renderer_allocate_texture(Renderer *renderer, int width, int height, Texture_Format format, int bpp, void *pixels);
 Texture *renderer_load_texture(Renderer *renderer, String filepath);
 
 void renderer_set_per_scene_uniforms(Renderer *renderer, Per_Scene_Uniforms uniforms);
 void renderer_draw_item(Renderer *renderer, Draw_Item_Info info);
+
+void init_immediate_rendering(Renderer *renderer);
+void immediate_begin(Renderer *renderer);
+void immediate_flush(Renderer *renderer);
+void immediate_quad(Renderer *renderer, Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector2 uv0, Vector2 uv1, Vector2 uv2, Vector2 uv3, Vector4 color);
+void immediate_quad(Renderer *renderer, Texture *texture, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, Vector4 color);
+void immediate_quad(Renderer *renderer, Texture *texture, Vector2 position, Vector2 size, Vector4 color);

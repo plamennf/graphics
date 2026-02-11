@@ -1,6 +1,6 @@
 workspace "graphics"
 	architecture "x86_64"
-	startproject "sandbox"
+	startproject "opengl_playground"
 
 	configurations {
 		"Debug",
@@ -87,6 +87,61 @@ project "sandbox"
             "d3d12.lib",
             "dxgi.lib",
             "d3dcompiler.lib",
+            "opengl32.lib",
+        }
+
+    filter "configurations:Debug"
+		defines "BUILD_DEBUG"
+		runtime "Debug"
+		symbols "on"
+
+	filter "configurations:Release"
+		defines "BUILD_RELEASE"
+		runtime "Release"
+		optimize "on"
+
+	filter "configurations:Dist"
+		defines "BUILD_DIST"
+		runtime "Release"
+		optimize "on"
+
+project "opengl_playground"
+    kind "ConsoleApp"
+	language "C++"
+	cppdialect "C++20"
+	staticruntime "on"
+    multiprocessorcompile "on"
+
+    targetdir ("%{wks.location}/build/%{cfg.buildcfg}")
+	objdir ("%{wks.location}/build-int/%{cfg.buildcfg}/%{prj.name}")
+
+	pchheader "pch.h"
+	pchsource "src/oglp/make_pch.cpp"
+
+    includedirs {
+        "%{wks.location}/src",
+        "%{wks.location}/external/include",
+    }
+
+    links {
+         "corelib",
+    }
+
+    files {
+        "src/oglp/**.h",
+        "src/oglp/**.cpp",
+    }
+
+    defines {
+		"_CRT_SECURE_NO_WARNINGS"
+	}
+
+    filter "system:windows"
+		systemversion "latest"
+
+        links {
+            "winmm.lib",
+            "opengl32.lib",
         }
 
     filter "configurations:Debug"

@@ -2,4 +2,4 @@
 
 vendor\premake\premake5.exe vs2026
 
-msbuild graphics.sln -v:m -p:Configuration=Debug
+msbuild graphics.slnx -v:m -p:Configuration=Debug

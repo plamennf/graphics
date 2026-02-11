@@ -3,6 +3,12 @@
 // From https://www.bytesbeneath.com/p/the-arena-custom-memory-allocators
 
 #ifdef PLATFORM_WINDOWS
+#ifdef APIENTRY
+#undef APIENTRY
+#endif
+#ifdef WINGDIAPI
+#undef WINGDIAPI
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif

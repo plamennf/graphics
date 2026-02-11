@@ -224,6 +224,8 @@ Renderer *renderer_d3d12_create(Platform_Window *window, bool vsync) {
         hr = renderer->per_scene_cb->Map(0, &read_range, (void**)&renderer->per_scene_cb_data);
         AssertHR(hr);
 
+        memset(renderer->per_scene_cb_data, 0, sizeof(Per_Scene_Uniforms));
+        
         renderer->per_scene_cb_descriptor_handle = renderer->srv_heap->GetGPUDescriptorHandleForHeapStart();
         renderer->per_scene_cb_descriptor_handle.ptr += renderer->num_allocated_textures * renderer->srv_descriptor_size;
 
@@ -689,6 +691,22 @@ Gpu_Buffer *renderer_d3d12_allocate_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_
     result->index_buffer_view  = index_buffer_view;
 
     return result;
+}
+
+void renderer_d3d12_update_entire_buffer(Renderer_D3D12 *renderer, Gpu_Buffer_D3D12 *buffer, u32 size, void *data) {
+    Assert(renderer);
+    Assert(buffer);
+    Assert(data);
+
+    UINT8 *data_begin;
+    D3D12_RANGE read_range = {}; // We do not intend to read from this resource on the CPU.
+
+    HRESULT hr = buffer->resource->Map(0, &read_range, (void **)&data_begin);
+    AssertHR(hr);
+
+    memcpy(data_begin, data, size);
+
+    buffer->resource->Unmap(0, NULL);
 }
 
 Texture *renderer_d3d12_allocate_texture(Renderer_D3D12 *renderer, int width, int height, Texture_Format format, int bpp, void *pixels) {

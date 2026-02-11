@@ -1,3 +1,4 @@
 @echo off
 
-build\Debug\sandbox.exe
+REM build\Debug\sandbox.exe
+build\Debug\opengl_playground.exe
