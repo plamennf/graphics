@@ -1,5 +1,11 @@
 #include "pch.h"
 #include "vulkan_context.h"
+#include "mesh.h"
+
+struct Vertex {
+    Vector3 position;
+    Vector2 uv;
+};
 
 int main(int argc, char *argv[]) {
     init_temporary_storage(Megabytes(1));
@@ -26,6 +32,22 @@ int main(int argc, char *argv[]) {
     
     Array <VkFramebuffer> framebuffers;
     if (!context.create_framebuffers(framebuffers, render_pass, window)) return 1;
+
+    VkShaderModule vs = vulkan_create_shader_module_from_binary(context.device, "data/shaders/compiled/test.vert.spv");
+    VkShaderModule fs = vulkan_create_shader_module_from_binary(context.device, "data/shaders/compiled/test.frag.spv");
+
+    Vertex vertices[] = {
+        { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
+        { { +1.0f, -1.0f, 0.0f }, { 0.0f, 1.0f } },
+        { { +0.0f, +1.0f, 0.0f }, { 1.0f, 1.0f } },
+    };
+
+    Mesh mesh = {};
+    mesh.vertex_buffer_size = sizeof(vertices);
+    mesh.vertex_buffer      = context.create_vertex_buffer(vertices, sizeof(vertices));
+    
+    Vulkan_Graphics_Pipeline pipeline;
+    if (!pipeline.init(context.device, window, render_pass, vs, fs, &mesh, num_images)) return 1;
     
     // Record command buffers
     {
@@ -53,6 +75,10 @@ int main(int argc, char *argv[]) {
 
             vkCmdBeginRenderPass(command_buffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
+            vulkan_cmd_bind_pipeline(command_buffers[i], &pipeline, i);
+
+            vkCmdDraw(command_buffers[i], 3, 1, 0, 0);
+            
             vkCmdEndRenderPass(command_buffers[i]);
             
             if (vkEndCommandBuffer(command_buffers[i]) != VK_SUCCESS) {
@@ -88,6 +114,7 @@ int main(int argc, char *argv[]) {
         if (image_index == -1) return 1;
         
         command_queue->submit_async(command_buffers[image_index]);
+        
         command_queue->present(image_index);
     }
     

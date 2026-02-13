@@ -1,5 +1,7 @@
 #pragma once
 
+struct Mesh;
+
 struct Vulkan_Physical_Device {
     VkPhysicalDevice device = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties;
@@ -37,6 +39,26 @@ struct Vulkan_Queue {
     void wait_idle();
 };
 
+struct Vulkan_Buffer_And_Memory {
+    VkBuffer buffer = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkDeviceSize allocation_size = 0;
+
+    void destroy(VkDevice device);
+};
+
+struct Vulkan_Graphics_Pipeline {
+    VkDevice device = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
+    Array <VkDescriptorSet> descriptor_sets;
+    
+    bool init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images);
+    bool create_descriptor_sets(Mesh *mesh, int num_images);
+};
+
 struct Vulkan_Context {
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger = VK_NULL_HANDLE;
@@ -51,12 +73,14 @@ struct Vulkan_Context {
     Array <VkImageView> image_views;
     VkCommandPool command_buffer_pool;
     Vulkan_Queue command_queue;
+    VkCommandBuffer copy_command_buffer;
     
     bool init(Platform_Window *window);
 
     bool create_command_buffers(int num_command_buffers, VkCommandBuffer *command_buffers);
     VkRenderPass create_simple_render_pass();
     bool create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window);
+    Vulkan_Buffer_And_Memory create_vertex_buffer(void *data, u32 size);
     
 private:
     bool create_instance();
@@ -65,7 +89,15 @@ private:
     bool create_device();
     bool create_swap_chain();
     bool create_command_buffer_pool();
+
+    Vulkan_Buffer_And_Memory create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+    bool copy_buffer(VkBuffer destination, VkBuffer source, VkDeviceSize size);
+    
+    u32 get_memory_type_index(u32 memory_type_bits_mask, VkMemoryPropertyFlags required_memory_property_flags);
 };
 
 bool vulkan_begin_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferUsageFlags usage_flags);
 VkSemaphore vulkan_create_semaphore(VkDevice device);
+VkShaderModule vulkan_create_shader_module_from_binary(VkDevice device, String filename);
+
+void vulkan_cmd_bind_pipeline(VkCommandBuffer buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index);

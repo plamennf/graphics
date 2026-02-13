@@ -1,12 +1,15 @@
 #include "pch.h"
 
 #include "vulkan_context.h"
+#include "mesh.h"
 
 #ifdef PLATFORM_WINDOWS
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <vulkan/vulkan_win32.h>
 #endif
+
+#include <stdio.h>
 
 static const char *get_debug_message_severity_string(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
 	switch (severity) {
@@ -146,6 +149,7 @@ bool Vulkan_Context::init(Platform_Window *window) {
     if (!create_swap_chain()) return false;
     if (!create_command_buffer_pool()) return false;
     if (!command_queue.init(device, swap_chain, queue_family, 0)) return false;
+    if (!create_command_buffers(1, &copy_command_buffer)) return false;
     
     return true;
 }
@@ -607,6 +611,118 @@ bool Vulkan_Context::create_framebuffers(Array <VkFramebuffer> &framebuffers, Vk
     return true;
 }
 
+Vulkan_Buffer_And_Memory Vulkan_Context::create_vertex_buffer(void *data, u32 size) {
+    // Create the staging buffer and copy the memory to it
+
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkMemoryPropertyFlags memory_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    Vulkan_Buffer_And_Memory staging_buffer = create_buffer(size, usage, memory_properties);
+    defer { staging_buffer.destroy(device); };
+    
+    void *staging_buffer_memory = NULL;
+    if (vkMapMemory(device, staging_buffer.memory, 0, staging_buffer.allocation_size, 0, &staging_buffer_memory) != VK_SUCCESS) {
+        logprintf("Failed to create a staging buffer for the vertex buffer!\n");
+        return {};
+    }
+    memcpy(staging_buffer_memory, data, size);
+    vkUnmapMemory(device, staging_buffer.memory);
+
+    usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    memory_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    Vulkan_Buffer_And_Memory result = create_buffer(size, usage, memory_properties);
+
+    if (!copy_buffer(result.buffer, staging_buffer.buffer, size)) {
+        result.destroy(device);
+        return {};
+    }
+
+    return result;
+}
+
+u32 Vulkan_Context::get_memory_type_index(u32 memory_type_bits_mask, VkMemoryPropertyFlags required_memory_property_flags) {
+    VkPhysicalDeviceMemoryProperties memory_properties = selected_physical_device->memory_properties;
+
+    for (u32 i = 0; i < memory_properties.memoryTypeCount; i++) {
+        VkMemoryType memory_type = memory_properties.memoryTypes[i];
+        u32 current_bitmask = Bit(i);
+        bool is_current_memory_type_supported = memory_type_bits_mask & current_bitmask;
+        bool has_required_memory_properties = (memory_type.propertyFlags & required_memory_property_flags) == required_memory_property_flags;
+
+        if (is_current_memory_type_supported && has_required_memory_properties) {
+            return i;
+        }
+    }
+
+    logprintf("Failed to find memory type for type %x requested memory properties %x\n", memory_type_bits_mask, required_memory_property_flags);
+    return UINT32_MAX;
+}
+
+Vulkan_Buffer_And_Memory Vulkan_Context::create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties) {
+    VkBufferCreateInfo create_info = {};
+    create_info.sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    create_info.size        = size;
+    create_info.usage       = usage;
+    create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    Vulkan_Buffer_And_Memory result = {};
+
+    if (vkCreateBuffer(device, &create_info, NULL, &result.buffer) != VK_SUCCESS) {
+        logprintf("Failed to create a vulkan buffer!\n");
+        return {};
+    }
+    logprintf("Vulkan buffer created!\n");
+
+    VkMemoryRequirements memory_requirements = {};
+    vkGetBufferMemoryRequirements(device, result.buffer, &memory_requirements);
+    logprintf("Vulkan buffer requires %d bytes\n", (int)memory_requirements.size);
+
+    result.allocation_size = memory_requirements.size;
+
+    u32 memory_type_index = get_memory_type_index(memory_requirements.memoryTypeBits, properties);
+    if (memory_type_index == UINT32_MAX) {
+        return {};
+    }
+    
+    logprintf("Memory type index %d\n", memory_type_index);
+
+    VkMemoryAllocateInfo memory_allocate_info = {};
+    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memory_allocate_info.allocationSize = memory_requirements.size;
+    memory_allocate_info.memoryTypeIndex = memory_type_index;
+
+    if (vkAllocateMemory(device, &memory_allocate_info, NULL, &result.memory) != VK_SUCCESS) {
+        logprintf("Failed to allocate memory for vulkan buffer!\n");
+        result.destroy(device);
+        return {};
+    }
+
+    if (vkBindBufferMemory(device, result.buffer, result.memory, 0) != VK_SUCCESS) {
+        logprintf("Failed to bind vulkan buffer memory!\n");
+        result.destroy(device);
+        return {};
+    }
+
+    return result;
+}
+
+bool Vulkan_Context::copy_buffer(VkBuffer destination, VkBuffer source, VkDeviceSize size) {
+    if (!vulkan_begin_command_buffer(copy_command_buffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)) return false;
+
+    VkBufferCopy buffer_copy = {};
+    buffer_copy.srcOffset = 0;
+    buffer_copy.dstOffset = 0;
+    buffer_copy.size      = size;
+
+    vkCmdCopyBuffer(copy_command_buffer, source, destination, 1, &buffer_copy);
+
+    vkEndCommandBuffer(copy_command_buffer);
+
+    command_queue.submit_sync(copy_command_buffer);
+    command_queue.wait_idle();
+
+    return true;
+}
+
 bool vulkan_begin_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferUsageFlags usage_flags) {
     VkCommandBufferBeginInfo begin_info = {};
     begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -628,6 +744,39 @@ VkSemaphore vulkan_create_semaphore(VkDevice device) {
     }
 
     return semaphore;
+}
+
+VkShaderModule vulkan_create_shader_module_from_binary(VkDevice device, String filename) {
+    const char *c_filename = temp_c_string(filename);
+    
+    FILE *file = fopen(c_filename, "rb");
+    if (!file) {
+        logprintf("Failed to read file '%s'\n", c_filename);
+        return NULL;
+    }
+    defer { fclose(file); };
+
+    fseek(file, 0, SEEK_END);
+    auto file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    u8 *file_data = new u8[file_size];
+    defer { delete [] file_data; };
+
+    fread(file_data, 1, file_size, file);
+
+    VkShaderModuleCreateInfo shader_create_info = {};
+    shader_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shader_create_info.codeSize = file_size;
+    shader_create_info.pCode = (const u32 *)file_data;
+
+    VkShaderModule shader_module;
+    if (vkCreateShaderModule(device, &shader_create_info, NULL, &shader_module) != VK_SUCCESS) {
+        logprintf("Failed to create a shader module for '%s'!\n", c_filename);
+        return NULL;
+    }
+
+    return shader_module;
 }
 
 bool Vulkan_Queue::init(VkDevice device, VkSwapchainKHR swap_chain, u32 queue_family, u32 queue_index) {
@@ -699,9 +848,215 @@ bool Vulkan_Queue::present(int _image_index) {
 
     CHECK_VK_RESULT(vkQueuePresentKHR(queue, &present_info), "Failed to queue present command");
 
+    wait_idle();
+    
     return true;
 }
 
 void Vulkan_Queue::wait_idle() {
     vkQueueWaitIdle(queue);
+}
+
+bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images) {
+    this->device = device;
+
+    if (mesh) {
+        if (!create_descriptor_sets(mesh, num_images)) {
+            return false;
+        }
+    }
+    
+    VkPipelineShaderStageCreateInfo shader_stage_create_infos[2] = {};
+
+    shader_stage_create_infos[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stage_create_infos[0].stage  = VK_SHADER_STAGE_VERTEX_BIT;
+    shader_stage_create_infos[0].module = vs;
+    shader_stage_create_infos[0].pName  = "main";
+
+    shader_stage_create_infos[1].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shader_stage_create_infos[1].stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+    shader_stage_create_infos[1].module = fs;
+    shader_stage_create_infos[1].pName  = "main";
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_info = {};
+    vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo pipeline_ia_create_info = {};
+    pipeline_ia_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    pipeline_ia_create_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    pipeline_ia_create_info.primitiveRestartEnable = VK_FALSE;
+
+    VkViewport viewport = {};
+    viewport.width    = (float)window->width;
+    viewport.height   = (float)window->height;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor = {};
+    scissor.extent.width  = window->width;
+    scissor.extent.height = window->height;
+
+    VkPipelineViewportStateCreateInfo vp_create_info = {};
+    vp_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vp_create_info.viewportCount = 1;
+    vp_create_info.pViewports = &viewport;
+    vp_create_info.scissorCount = 1;
+    vp_create_info.pScissors = &scissor;
+
+    VkPipelineRasterizationStateCreateInfo rasterization_create_info = {};
+    rasterization_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterization_create_info.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterization_create_info.cullMode = VK_CULL_MODE_NONE;
+    rasterization_create_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterization_create_info.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo pipeline_ms_create_info = {};
+    pipeline_ms_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    pipeline_ms_create_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    pipeline_ms_create_info.sampleShadingEnable = VK_FALSE;
+    pipeline_ms_create_info.minSampleShading = 1.0f;
+
+    VkPipelineColorBlendAttachmentState blend_attachment_state = {};
+    blend_attachment_state.blendEnable = VK_FALSE;
+    blend_attachment_state.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo blend_create_info = {};
+    blend_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    blend_create_info.logicOpEnable = VK_FALSE;
+    blend_create_info.logicOp = VK_LOGIC_OP_COPY;
+    blend_create_info.attachmentCount = 1;
+    blend_create_info.pAttachments = &blend_attachment_state;
+
+    VkPipelineLayoutCreateInfo layout_info = {};
+    layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+    if (mesh && mesh->vertex_buffer.buffer) {
+        layout_info.setLayoutCount = 1;
+        layout_info.pSetLayouts = &descriptor_set_layout;
+    } else {
+        layout_info.setLayoutCount = 0;
+        layout_info.pSetLayouts = NULL;
+    }
+    
+    CHECK_VK_RESULT(vkCreatePipelineLayout(device, &layout_info, NULL, &pipeline_layout), "Failed to create graphics pipeline layout");
+    
+    VkGraphicsPipelineCreateInfo pipeline_info = {};
+    pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline_info.stageCount = ArrayCount(shader_stage_create_infos);
+    pipeline_info.pStages = shader_stage_create_infos;
+    pipeline_info.pVertexInputState = &vertex_input_info;
+    pipeline_info.pInputAssemblyState = &pipeline_ia_create_info;
+    pipeline_info.pViewportState = &vp_create_info;
+    pipeline_info.pRasterizationState = &rasterization_create_info;
+    pipeline_info.pMultisampleState = &pipeline_ms_create_info;
+    pipeline_info.pColorBlendState = &blend_create_info;
+    pipeline_info.layout = pipeline_layout;
+    pipeline_info.renderPass = render_pass;
+    pipeline_info.subpass = 0;
+    pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
+    pipeline_info.basePipelineIndex = -1;
+    
+    CHECK_VK_RESULT(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_info, NULL, &pipeline), "Failed to create graphics pipeline");
+
+    logprintf("Vulkan graphics pipeline created!\n");
+    
+    return true;
+}
+
+bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images) {
+    // Create descriptor pool(num_images)
+    VkDescriptorPoolSize pool_size = {};
+    pool_size.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_size.descriptorCount = num_images;
+    
+    VkDescriptorPoolCreateInfo pool_create_info = {};
+    pool_create_info.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_create_info.maxSets = (u32)num_images;
+    pool_create_info.poolSizeCount = 1;
+    pool_create_info.pPoolSizes = &pool_size;
+    CHECK_VK_RESULT(vkCreateDescriptorPool(device, &pool_create_info, NULL, &descriptor_pool), "Failed to create vulkan descriptor pool");
+    logprintf("Vulkan descriptor pool created!\n");
+    
+    // Create descriptor set layout
+    Array <VkDescriptorSetLayoutBinding> layout_bindings;
+    layout_bindings.use_temporary_storage = true;
+    
+    VkDescriptorSetLayoutBinding vertex_shader_layout_binding_vertex_buffer = {};
+    vertex_shader_layout_binding_vertex_buffer.binding = 0;
+    vertex_shader_layout_binding_vertex_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    vertex_shader_layout_binding_vertex_buffer.descriptorCount = 1;
+    vertex_shader_layout_binding_vertex_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    layout_bindings.add(vertex_shader_layout_binding_vertex_buffer);
+
+    VkDescriptorSetLayoutCreateInfo layout_info = {};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.bindingCount = (u32)layout_bindings.count;
+    layout_info.pBindings = layout_bindings.data;
+
+    CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layout_info, NULL, &descriptor_set_layout), "Failed to create vulkan descriptor set layout");
+    
+    // Allocate descriptor sets(num images)
+    Array <VkDescriptorSetLayout> layouts;
+    layouts.use_temporary_storage = true;
+    layouts.resize(num_images);
+    for (int i = 0; i < layouts.count; i++) {
+        layouts[i] = descriptor_set_layout;
+    }
+
+    VkDescriptorSetAllocateInfo allocate_info = {};
+    allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocate_info.descriptorPool = descriptor_pool;
+    allocate_info.descriptorSetCount = (u32)num_images;
+    allocate_info.pSetLayouts = layouts.data;
+
+    descriptor_sets.resize(num_images);
+    
+    CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocate_info, descriptor_sets.data), "Failed to allocate vulkan descriptor sets");
+    
+    // Update descriptor sets(mesh, num images)
+    VkDescriptorBufferInfo buffer_info_vertex_buffer = {};
+    buffer_info_vertex_buffer.buffer = mesh->vertex_buffer.buffer;
+    buffer_info_vertex_buffer.offset = 0;
+    buffer_info_vertex_buffer.range  = mesh->vertex_buffer_size;
+    
+    Array <VkWriteDescriptorSet> write_descriptor_sets;
+    write_descriptor_sets.use_temporary_storage = true;
+    
+    for (int i = 0; i < num_images; i++) {
+        VkWriteDescriptorSet descriptor_set = {};
+        descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptor_set.dstSet = descriptor_sets[i];
+        descriptor_set.dstBinding = 0;
+        descriptor_set.dstArrayElement = 0;
+        descriptor_set.descriptorCount = 1;
+        descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptor_set.pBufferInfo = &buffer_info_vertex_buffer;
+
+        write_descriptor_sets.add(descriptor_set);
+    }
+    
+    vkUpdateDescriptorSets(device, (u32)write_descriptor_sets.count, write_descriptor_sets.data, 0, NULL);
+    
+    return true;
+}
+
+void Vulkan_Buffer_And_Memory::destroy(VkDevice device) {
+    if (memory) {
+		vkFreeMemory(device, memory, NULL);
+	}
+    
+	if (buffer) {
+		vkDestroyBuffer(device, buffer, NULL);
+	}
+}
+
+void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index) {
+    Assert(pipeline);
+    
+    vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
+    if (pipeline->descriptor_sets.count > 0) {
+        vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pipeline->pipeline_layout, 0, 1,
+                                &pipeline->descriptor_sets[image_index], 0, NULL);
+    }
 }
