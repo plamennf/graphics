@@ -98,6 +98,15 @@ struct Array {
 
     inline Iterator begin() { return data; }
     inline Iterator end() { return data + count; }
+
+#ifdef COMPILER_MSVC
+#pragma warning(disable : 4172)
+#endif
+    inline Iterator const &begin() const { return data; }
+    inline Iterator const &end() const { return data + count; }
+#ifdef COMPILER_MSVC
+#pragma warning(default : 4172)
+#endif
 };
 
 template <typename T>
