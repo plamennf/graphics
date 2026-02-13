@@ -470,7 +470,8 @@ bool Vulkan_Context::create_swap_chain() {
     VkPresentModeKHR present_mode = choose_present_mode(present_modes);
     
     VkSurfaceFormatKHR surface_format = choose_surface_format_and_color_space(selected_physical_device->surface_formats);
-
+    swap_chain_surface_format = surface_format;
+    
     VkSwapchainCreateInfoKHR swap_chain_create_info = {};
     swap_chain_create_info.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swap_chain_create_info.surface          = surface;
@@ -539,6 +540,67 @@ bool Vulkan_Context::create_command_buffers(int num_command_buffers, VkCommandBu
 
     logprintf("%d vulkan command buffers allocated!\n", num_command_buffers);
 
+    return true;
+}
+
+VkRenderPass Vulkan_Context::create_simple_render_pass() {
+    VkAttachmentDescription attachment_description = {};
+    attachment_description.format = swap_chain_surface_format.format;
+    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachment_description.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference attachment_reference = {};
+    attachment_reference.attachment = 0;
+    attachment_reference.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkSubpassDescription subpass_description = {};
+    subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass_description.inputAttachmentCount = 0;
+    subpass_description.pInputAttachments = NULL;
+    subpass_description.colorAttachmentCount = 1;
+    subpass_description.pColorAttachments = &attachment_reference;
+
+    VkRenderPassCreateInfo render_pass_create_info = {};
+    render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    render_pass_create_info.attachmentCount = 1;
+    render_pass_create_info.pAttachments = &attachment_description;
+    render_pass_create_info.subpassCount = 1;
+    render_pass_create_info.pSubpasses = &subpass_description;
+
+    VkRenderPass render_pass;
+    if (vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass) != VK_SUCCESS) {
+        logprintf("Failed to create simple render pass\n");
+        return NULL;
+    }
+
+    logprintf("Vulkan render pass created!\n");
+    
+    return render_pass;
+}
+
+bool Vulkan_Context::create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window) {
+    framebuffers.resize(images.count);
+
+    for (int i = 0; i < framebuffers.count; i++) {
+        VkFramebufferCreateInfo create_info = {};
+        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        create_info.renderPass = render_pass;
+        create_info.attachmentCount = 1;
+        create_info.pAttachments = &image_views[i];
+        create_info.width = window->width;
+        create_info.height = window->height;
+        create_info.layers = 1;
+
+        CHECK_VK_RESULT(vkCreateFramebuffer(device, &create_info, NULL, &framebuffers[i]), "Failed to create vulkan framebuffer");
+    }
+
+    logprintf("Vulkan framebuffers created!\n");
+    
     return true;
 }
 

@@ -46,6 +46,7 @@ struct Vulkan_Context {
     u32 queue_family = 0;
     VkDevice device = VK_NULL_HANDLE;
     VkSwapchainKHR swap_chain = VK_NULL_HANDLE;
+    VkSurfaceFormatKHR swap_chain_surface_format;
     Array <VkImage> images;
     Array <VkImageView> image_views;
     VkCommandPool command_buffer_pool;
@@ -54,7 +55,9 @@ struct Vulkan_Context {
     bool init(Platform_Window *window);
 
     bool create_command_buffers(int num_command_buffers, VkCommandBuffer *command_buffers);
-
+    VkRenderPass create_simple_render_pass();
+    bool create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window);
+    
 private:
     bool create_instance();
     bool create_debug_callback();
