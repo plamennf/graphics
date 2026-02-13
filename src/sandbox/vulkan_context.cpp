@@ -377,9 +377,12 @@ u32 Vulkan_Physical_Devices::select_device(VkQueueFlags required_queue_type, boo
     for (int i = 0; i < devices.count; i++) {
         Vulkan_Physical_Device device = devices[i];
         for (int j = 0; j < device.queue_family_properties.count; j++) {
+            // NOTE: @Hack to make my vulkan program select my nvidia gpu
+            // TODO: Remove this            
             VkQueueFamilyProperties properties = device.queue_family_properties[j];
             if ((properties.queueFlags & required_queue_type) &&
-                ((bool)device.queue_supports_present[j] == supports_present)) {
+                ((bool)device.queue_supports_present[j] == supports_present) &&
+                strstr(device.properties.deviceName, "NVIDIA")) {
                 device_index = i;
                 logprintf("Using graphics device %d and queue family %d\n\n", i, j);
                 return j;
@@ -595,7 +598,7 @@ bool Vulkan_Context::create_framebuffers(Array <VkFramebuffer> &framebuffers, Vk
         create_info.width = window->width;
         create_info.height = window->height;
         create_info.layers = 1;
-
+        
         CHECK_VK_RESULT(vkCreateFramebuffer(device, &create_info, NULL, &framebuffers[i]), "Failed to create vulkan framebuffer");
     }
 
