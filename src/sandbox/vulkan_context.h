@@ -12,6 +12,7 @@ struct Vulkan_Physical_Device {
     VkPhysicalDeviceMemoryProperties memory_properties;
     Array <VkPresentModeKHR> present_modes;
     VkPhysicalDeviceFeatures features;
+    VkFormat depth_format;
 };
 
 struct Vulkan_Physical_Devices {
@@ -83,6 +84,7 @@ struct Vulkan_Context {
     VkSurfaceFormatKHR swap_chain_surface_format;
     Array <VkImage> images;
     Array <VkImageView> image_views;
+    Array <Vulkan_Texture> depth_images;
     VkCommandPool command_buffer_pool;
     Vulkan_Queue command_queue;
     VkCommandBuffer copy_command_buffer;
@@ -106,6 +108,8 @@ private:
     bool create_swap_chain();
     bool create_command_buffer_pool();
 
+    bool create_depth_resources(Platform_Window *window);
+    
     Vulkan_Buffer_And_Memory create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     bool copy_buffer(VkBuffer destination, VkBuffer source, VkDeviceSize size);
 

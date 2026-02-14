@@ -44,13 +44,16 @@ int main(int argc, char *argv[]) {
     VkShaderModule fs = vulkan_create_shader_module_from_binary(context.device, "data/shaders/compiled/test.frag.spv");
     
     Vertex vertices[] = {
-        { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
-        { { +1.0f, -1.0f, 0.0f }, { 0.0f, 1.0f } },
-        { { +1.0f, +1.0f, 0.0f }, { 1.0f, 1.0f } },
+        { { -1.0f, -1.0f, -5.0f }, { 0.0f, 0.0f } },
+        { { -1.0f, +1.0f, -5.0f }, { 0.0f, 1.0f } },
+        { { +1.0f, +1.0f, -5.0f }, { 1.0f, 1.0f } },
+        { { -1.0f, -1.0f, -5.0f }, { 0.0f, 0.0f } },
+        { { +1.0f, +1.0f, -5.0f }, { 1.0f, 1.0f } },
+        { { +1.0f, -1.0f, -5.0f }, { 1.0f, 0.0f } },
 
-        { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
-        { { +1.0f, +1.0f, 0.0f }, { 1.0f, 1.0f } },
-        { { -1.0f, +1.0f, 0.0f }, { 0.0f, 1.0f } },
+        { { -1.0f, -1.0f, -3.0f }, { 0.0f, 0.0f } },
+        { { -1.0f, +1.0f, -3.0f }, { 0.0f, 1.0f } },
+        { { +1.0f, +1.0f, -3.0f }, { 1.0f, 1.0f } },
     };
 
     Mesh mesh = {};
@@ -68,10 +71,9 @@ int main(int argc, char *argv[]) {
     
     // Record command buffers
     {
-        VkClearColorValue clear_color = { 0.2f, 0.5f, 0.8f, 1.0f };
-
-        VkClearValue clear_value;
-        clear_value.color = clear_color;
+        VkClearValue clear_values[2];
+        clear_values[0].color = { 0.2f, 0.5f, 0.8f, 1.0f };
+        clear_values[1].depthStencil = { 1.0f, 0 };
 
         VkRenderPassBeginInfo render_pass_begin_info = {};
         render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -80,8 +82,8 @@ int main(int argc, char *argv[]) {
         render_pass_begin_info.renderArea.offset.y = 0;
         render_pass_begin_info.renderArea.extent.width  = globals.window->width;
         render_pass_begin_info.renderArea.extent.height = globals.window->height;
-        render_pass_begin_info.clearValueCount = 1;
-        render_pass_begin_info.pClearValues = &clear_value;
+        render_pass_begin_info.clearValueCount = ArrayCount(clear_values);
+        render_pass_begin_info.pClearValues = clear_values;
 
         for (int i = 0; i < command_buffers.count; i++) {            
             if (!vulkan_begin_command_buffer(command_buffers[i], VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
@@ -94,7 +96,7 @@ int main(int argc, char *argv[]) {
 
             vulkan_cmd_bind_pipeline(command_buffers[i], &pipeline, i);
 
-            vkCmdDraw(command_buffers[i], 6, 1, 0, 0);
+            vkCmdDraw(command_buffers[i], ArrayCount(vertices), 1, 0, 0);
             
             vkCmdEndRenderPass(command_buffers[i]);
             
@@ -110,8 +112,12 @@ int main(int argc, char *argv[]) {
     Camera camera;
     init_camera(&camera, v3(0, 2, 0), 0, 0, 0);
 
-    bool should_show_cursor = false;
-    platform_hide_and_lock_cursor(globals.window);
+    bool should_show_cursor = true;
+    if (should_show_cursor) {
+        platform_show_and_unlock_cursor();
+    } else {
+        platform_hide_and_lock_cursor(globals.window);
+    }
     
     u64 last_time = platform_get_time_in_nanoseconds();
     while (globals.window->is_open) {
@@ -154,11 +160,12 @@ int main(int argc, char *argv[]) {
 
         static float foo = 0.0f;
         Matrix4 rotation_matrix = make_z_rotation(foo);
-        foo += 0.001f;
+        //foo += 0.001f;
         
         Matrix4 projection_matrix = make_perspective((float)globals.window->width / (float)globals.window->height, 45.0f, 0.1f, 1000.0f);
         Matrix4 wvp = rotation_matrix * get_view_matrix(&camera) * projection_matrix;
         wvp = rotation_matrix;
+        wvp = projection_matrix;
         wvp = transpose(wvp);
         if (!uniform_buffers[image_index].update(context.device, &wvp, sizeof(wvp))) return 1;
         

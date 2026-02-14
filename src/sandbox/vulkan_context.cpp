@@ -19,6 +19,35 @@ static bool has_stencil_component(VkFormat format) {
 		    (format == VK_FORMAT_D24_UNORM_S8_UINT));
 }
 
+static VkFormat find_supported_format(VkPhysicalDevice device, Array <VkFormat> const &candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+    for (int i = 0; i < candidates.count; i++) {
+        VkFormat format = candidates[i];
+        VkFormatProperties properties;
+        vkGetPhysicalDeviceFormatProperties(device, format, &properties);
+
+        if ((tiling == VK_IMAGE_TILING_LINEAR) &&
+            (properties.linearTilingFeatures & features) == features) {
+            return format;
+        } else if ((tiling == VK_IMAGE_TILING_OPTIMAL) &&
+                   (properties.optimalTilingFeatures & features) == features) {
+            return format;
+        }
+    }
+
+    Assert(!"Failed to find support vulkan format!");
+    return (VkFormat)0;
+}
+
+static VkFormat find_depth_format(VkPhysicalDevice physical_device) {
+    Array <VkFormat> candidates;
+    candidates.use_temporary_storage = true;
+    candidates.add(VK_FORMAT_D32_SFLOAT);
+    candidates.add(VK_FORMAT_D32_SFLOAT_S8_UINT);
+    candidates.add(VK_FORMAT_D24_UNORM_S8_UINT);
+
+    return find_supported_format(physical_device, candidates, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+}
+
 static int get_bpp(VkFormat format) {
     switch (format) {
         case VK_FORMAT_R8_SINT:
@@ -184,6 +213,7 @@ bool Vulkan_Context::init(Platform_Window *window) {
     if (!create_command_buffer_pool()) return false;
     if (!command_queue.init(device, swap_chain, queue_family, 0)) return false;
     if (!create_command_buffers(1, &copy_command_buffer)) return false;
+    if (!create_depth_resources(window)) return false;
     
     return true;
 }
@@ -406,6 +436,8 @@ bool Vulkan_Physical_Devices::init(VkInstance instance, VkSurfaceKHR surface) {
         logprintf("    Number of heap types: %d\n\n", device->memory_properties.memoryHeapCount);
 
         vkGetPhysicalDeviceFeatures(physical_device, &device->features);
+
+        device->depth_format = find_depth_format(physical_device);
     }
 
     return true;
@@ -571,6 +603,29 @@ bool Vulkan_Context::create_command_buffer_pool() {
     return true;
 }
 
+bool Vulkan_Context::create_depth_resources(Platform_Window *window) {
+    int num_swap_chain_images = images.count;
+    depth_images.resize(num_swap_chain_images);
+
+    VkFormat depth_format = selected_physical_device->depth_format;
+
+    for (int i = 0; i < num_swap_chain_images; i++) {
+        VkImageUsageFlagBits usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        VkMemoryPropertyFlagBits property_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        depth_images[i] = create_image(window->width, window->height, depth_format, usage, property_flags);
+        if (!depth_images[i].is_valid) return false;
+
+        if (!transition_image_layout(depth_images[i].image, depth_format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)) return false;
+
+        depth_images[i].view = create_image_view(device, depth_images[i].image, depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D, 1, 1);
+        if (!depth_images[i].view) return false;
+    }
+
+    logprintf("Depth images created!\n");
+
+    return true;
+}
+
 bool Vulkan_Context::create_command_buffers(int num_command_buffers, VkCommandBuffer *command_buffers) {
     VkCommandBufferAllocateInfo allocate_info = {};
     allocate_info.sType       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -586,31 +641,51 @@ bool Vulkan_Context::create_command_buffers(int num_command_buffers, VkCommandBu
 }
 
 VkRenderPass Vulkan_Context::create_simple_render_pass() {
-    VkAttachmentDescription attachment_description = {};
-    attachment_description.format = swap_chain_surface_format.format;
-    attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachment_description.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkAttachmentDescription color_attachment_description = {};
+    color_attachment_description.format = swap_chain_surface_format.format;
+    color_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    color_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    color_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    color_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    color_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    color_attachment_description.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-    VkAttachmentReference attachment_reference = {};
-    attachment_reference.attachment = 0;
-    attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkAttachmentReference color_attachment_reference = {};
+    color_attachment_reference.attachment = 0;
+    color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    
+    VkAttachmentDescription depth_attachment_description = {};
+    depth_attachment_description.format = selected_physical_device->depth_format;
+    depth_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
+    depth_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depth_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depth_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depth_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depth_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depth_attachment_description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference depth_attachment_reference = {};
+    depth_attachment_reference.attachment = 1;
+    depth_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    
     VkSubpassDescription subpass_description = {};
     subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass_description.inputAttachmentCount = 0;
     subpass_description.pInputAttachments = NULL;
     subpass_description.colorAttachmentCount = 1;
-    subpass_description.pColorAttachments = &attachment_reference;
+    subpass_description.pColorAttachments = &color_attachment_reference;
+    subpass_description.pDepthStencilAttachment = &depth_attachment_reference;
 
+    VkAttachmentDescription attachment_descriptions[] = {
+        color_attachment_description,
+        depth_attachment_description,
+    };
+    
     VkRenderPassCreateInfo render_pass_create_info = {};
     render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_create_info.attachmentCount = 1;
-    render_pass_create_info.pAttachments = &attachment_description;
+    render_pass_create_info.attachmentCount = ArrayCount(attachment_descriptions);
+    render_pass_create_info.pAttachments = attachment_descriptions;
     render_pass_create_info.subpassCount = 1;
     render_pass_create_info.pSubpasses = &subpass_description;
 
@@ -629,11 +704,16 @@ bool Vulkan_Context::create_framebuffers(Array <VkFramebuffer> &framebuffers, Vk
     framebuffers.resize(images.count);
 
     for (int i = 0; i < framebuffers.count; i++) {
+        VkImageView attachments[] = {
+            image_views[i],
+            depth_images[i].view
+        };
+        
         VkFramebufferCreateInfo create_info = {};
         create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         create_info.renderPass = render_pass;
-        create_info.attachmentCount = 1;
-        create_info.pAttachments = &image_views[i];
+        create_info.attachmentCount = ArrayCount(attachments);
+        create_info.pAttachments = attachments;
         create_info.width = window->width;
         create_info.height = window->height;
         create_info.layers = 1;
@@ -779,7 +859,7 @@ Vulkan_Buffer_And_Memory Vulkan_Context::create_uniform_buffer(VkDeviceSize size
 
 Vulkan_Texture Vulkan_Context::create_texture(String filepath) {
     int width, height, channels;
-    stbi_set_flip_vertically_on_load(1);
+    stbi_set_flip_vertically_on_load(0);
     stbi_uc *data = stbi_load(temp_c_string(filepath), &width, &height, &channels, 4);
     if (!data) {
         logprintf("Failed to load image '%s'\n", temp_c_string(filepath));
@@ -1296,6 +1376,13 @@ bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, Vk
     blend_attachment_state.blendEnable = VK_FALSE;
     blend_attachment_state.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {};
+    depth_stencil_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depth_stencil_state.depthTestEnable = VK_TRUE;
+    depth_stencil_state.depthWriteEnable = VK_TRUE;
+    depth_stencil_state.depthCompareOp = VK_COMPARE_OP_LESS;
+    depth_stencil_state.maxDepthBounds = 1.0f;
+    
     VkPipelineColorBlendStateCreateInfo blend_create_info = {};
     blend_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     blend_create_info.logicOpEnable = VK_FALSE;
@@ -1325,6 +1412,7 @@ bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, Vk
     pipeline_info.pViewportState = &vp_create_info;
     pipeline_info.pRasterizationState = &rasterization_create_info;
     pipeline_info.pMultisampleState = &pipeline_ms_create_info;
+    pipeline_info.pDepthStencilState = &depth_stencil_state;
     pipeline_info.pColorBlendState = &blend_create_info;
     pipeline_info.layout = pipeline_layout;
     pipeline_info.renderPass = render_pass;
