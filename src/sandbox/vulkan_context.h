@@ -43,7 +43,9 @@ struct Vulkan_Buffer_And_Memory {
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkDeviceSize allocation_size = 0;
+    bool is_valid = false;
 
+    bool update(VkDevice device, void *data, u32 size);
     void destroy(VkDevice device);
 };
 
@@ -55,8 +57,8 @@ struct Vulkan_Graphics_Pipeline {
     VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
     Array <VkDescriptorSet> descriptor_sets;
     
-    bool init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images);
-    bool create_descriptor_sets(Mesh *mesh, int num_images);
+    bool init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size);
+    bool create_descriptor_sets(Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size);
 };
 
 struct Vulkan_Context {
@@ -81,6 +83,7 @@ struct Vulkan_Context {
     VkRenderPass create_simple_render_pass();
     bool create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window);
     Vulkan_Buffer_And_Memory create_vertex_buffer(void *data, u32 size);
+    bool create_uniform_buffers(Array <Vulkan_Buffer_And_Memory> &buffers, u32 size);
     
 private:
     bool create_instance();
@@ -92,6 +95,8 @@ private:
 
     Vulkan_Buffer_And_Memory create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     bool copy_buffer(VkBuffer destination, VkBuffer source, VkDeviceSize size);
+
+    Vulkan_Buffer_And_Memory create_uniform_buffer(VkDeviceSize size);
     
     u32 get_memory_type_index(u32 memory_type_bits_mask, VkMemoryPropertyFlags required_memory_property_flags);
 };

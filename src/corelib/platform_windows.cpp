@@ -147,7 +147,7 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
             mouse->cursor_y_delta = mouse->cursor_y - y_pos;
 
             mouse->cursor_x = x_pos;
-            mouse->cursor_y = window->height - y_pos;
+            mouse->cursor_y = y_pos;
         } break;
 
         case WM_MOUSEWHEEL: {
@@ -568,6 +568,51 @@ void opengl_swap_buffers(Platform_Window *_window) {
     
     HDC dc = GetDC(window->hwnd);
     SwapBuffers(dc);
+}
+
+void platform_show_and_unlock_cursor() {
+    // Unlock cursor from any clipping region
+    ClipCursor(NULL);
+
+    // Make sure cursor is visible
+    while (ShowCursor(TRUE) < 0) {
+        // ShowCursor uses an internal counter; loop until visible
+    }
+}
+
+void platform_hide_and_lock_cursor(Platform_Window *_window) {
+    Assert(_window);
+    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
+
+HWND hwnd = window->hwnd;
+
+    // Hide cursor
+    while (ShowCursor(FALSE) >= 0) {
+        // loop until actually hidden
+    }
+
+    // Get client rect and convert to screen coords
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+
+    POINT ul = { rect.left, rect.top };
+    POINT lr = { rect.right, rect.bottom };
+
+    ClientToScreen(hwnd, &ul);
+    ClientToScreen(hwnd, &lr);
+
+    rect.left   = ul.x;
+    rect.top    = ul.y;
+    rect.right  = lr.x;
+    rect.bottom = lr.y;
+
+    // Lock cursor to window client area
+    ClipCursor(&rect);
+
+    // Optional: center cursor
+    int center_x = (rect.left + rect.right) / 2;
+    int center_y = (rect.top + rect.bottom) / 2;
+    SetCursorPos(center_x, center_y);
 }
 
 #endif

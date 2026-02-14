@@ -21,3 +21,6 @@ bool platform_window_was_resized(Platform_Window *window);
 void platform_window_toggle_fullscreen(Platform_Window *window);
 
 u64 platform_get_time_in_nanoseconds();
+
+void platform_show_and_unlock_cursor();
+void platform_hide_and_lock_cursor(Platform_Window *window);

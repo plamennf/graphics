@@ -702,6 +702,8 @@ Vulkan_Buffer_And_Memory Vulkan_Context::create_buffer(VkDeviceSize size, VkBuff
         return {};
     }
 
+    result.is_valid = true;
+
     return result;
 }
 
@@ -721,6 +723,23 @@ bool Vulkan_Context::copy_buffer(VkBuffer destination, VkBuffer source, VkDevice
     command_queue.wait_idle();
 
     return true;
+}
+
+bool Vulkan_Context::create_uniform_buffers(Array <Vulkan_Buffer_And_Memory> &buffers, u32 size) {
+    buffers.resize(images.count);
+
+    for (int i = 0; i < buffers.count; i++) {
+        buffers[i] = create_uniform_buffer(size);
+        if (!buffers[i].is_valid) return false;
+    }
+
+    return true;
+}
+
+Vulkan_Buffer_And_Memory Vulkan_Context::create_uniform_buffer(VkDeviceSize size) {
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    VkMemoryPropertyFlags memory_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    return create_buffer(size, usage, memory_properties);
 }
 
 bool vulkan_begin_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferUsageFlags usage_flags) {
@@ -857,11 +876,11 @@ void Vulkan_Queue::wait_idle() {
     vkQueueWaitIdle(queue);
 }
 
-bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images) {
+bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size) {
     this->device = device;
 
     if (mesh) {
-        if (!create_descriptor_sets(mesh, num_images)) {
+        if (!create_descriptor_sets(mesh, num_images, uniform_buffers, uniform_buffer_size)) {
             return false;
         }
     }
@@ -962,17 +981,21 @@ bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, Vk
     return true;
 }
 
-bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images) {
+bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size) {
     // Create descriptor pool(num_images)
-    VkDescriptorPoolSize pool_size = {};
-    pool_size.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pool_size.descriptorCount = num_images;
+    VkDescriptorPoolSize pool_sizes[2] = {};
+    
+    pool_sizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_sizes[0].descriptorCount = num_images;
+
+    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_sizes[1].descriptorCount = num_images;
     
     VkDescriptorPoolCreateInfo pool_create_info = {};
     pool_create_info.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool_create_info.maxSets = (u32)num_images;
-    pool_create_info.poolSizeCount = 1;
-    pool_create_info.pPoolSizes = &pool_size;
+    pool_create_info.poolSizeCount = ArrayCount(pool_sizes);
+    pool_create_info.pPoolSizes = pool_sizes;
     CHECK_VK_RESULT(vkCreateDescriptorPool(device, &pool_create_info, NULL, &descriptor_pool), "Failed to create vulkan descriptor pool");
     logprintf("Vulkan descriptor pool created!\n");
     
@@ -985,9 +1008,15 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
     vertex_shader_layout_binding_vertex_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertex_shader_layout_binding_vertex_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_vertex_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
     layout_bindings.add(vertex_shader_layout_binding_vertex_buffer);
 
+    VkDescriptorSetLayoutBinding vertex_shader_layout_binding_uniform_buffer = {};
+    vertex_shader_layout_binding_uniform_buffer.binding = 1;
+    vertex_shader_layout_binding_uniform_buffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    vertex_shader_layout_binding_uniform_buffer.descriptorCount = 1;
+    vertex_shader_layout_binding_uniform_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    layout_bindings.add(vertex_shader_layout_binding_uniform_buffer);
+        
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layout_info.bindingCount = (u32)layout_bindings.count;
@@ -1031,12 +1060,35 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
         descriptor_set.descriptorCount = 1;
         descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptor_set.pBufferInfo = &buffer_info_vertex_buffer;
-
         write_descriptor_sets.add(descriptor_set);
+        
+        VkDescriptorBufferInfo buffer_info_uniform = {};
+        buffer_info_uniform.buffer = uniform_buffers[i].buffer;
+        buffer_info_uniform.offset = 0;
+        buffer_info_uniform.range  = uniform_buffer_size;
+
+        VkWriteDescriptorSet uniform_descriptor_set = {};
+        uniform_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        uniform_descriptor_set.dstSet = descriptor_sets[i];
+        uniform_descriptor_set.dstBinding = 1;
+        uniform_descriptor_set.dstArrayElement = 0;
+        uniform_descriptor_set.descriptorCount = 1;
+        uniform_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uniform_descriptor_set.pBufferInfo = &buffer_info_uniform;
+        write_descriptor_sets.add(uniform_descriptor_set);
     }
     
     vkUpdateDescriptorSets(device, (u32)write_descriptor_sets.count, write_descriptor_sets.data, 0, NULL);
     
+    return true;
+}
+
+bool Vulkan_Buffer_And_Memory::update(VkDevice device, void *data, u32 size) {
+    void *mapped_memory;
+    CHECK_VK_RESULT(vkMapMemory(device, memory, 0, size, 0, &mapped_memory), "Failed to map buffer memory");
+    memcpy(mapped_memory, data, size);
+    vkUnmapMemory(device, memory);
+
     return true;
 }
 
