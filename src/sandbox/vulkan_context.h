@@ -2,12 +2,17 @@
 
 struct Mesh;
 
-enum Vulkan_Descriptor_Bindings {
-    BINDING_VERTEX_BUFFER,
-    BINDING_INDEX_BUFFER,
-    BINDING_UNIFORM,
-    BINDING_TEXTURE,
-    NUM_BINDINGS
+enum Per_Scene_Descriptor_Bindings {
+    PER_SCENE_BINDING_UNIFORM,
+    NUM_PER_SCENE_BINDINGS
+};
+
+enum Per_Object_Descriptor_Bindings {
+    PER_OBJECT_BINDING_VERTEX_BUFFER,
+    PER_OBJECT_BINDING_INDEX_BUFFER,
+    PER_OBJECT_BINDING_UNIFORM,
+    PER_OBJECT_BINDING_TEXTURE,
+    NUM_PER_OBJECT_BINDINGS
 };
 
 struct Vulkan_Physical_Device {
@@ -76,13 +81,19 @@ struct Vulkan_Graphics_Pipeline {
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
-
+    VkDescriptorPool per_scene_descriptor_pool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout per_scene_descriptor_set_layout = VK_NULL_HANDLE;
+    
     Vulkan_Graphics_Pipeline(VkDevice device, Platform_Window *window) : window(window), device(device) {}
     
     bool init(VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs);
-    
+
+    // @TODO: Collapse these in a more generic function.
     bool allocate_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images);
     void update_descriptor_sets(Vulkan_Buffer_And_Memory vertex_buffer, Vulkan_Buffer_And_Memory index_buffer, Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Vulkan_Texture texture, Array <VkDescriptorSet> &descriptor_sets);
+
+    bool allocate_per_scene_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images);
+    void update_per_scene_descriptor_sets(Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Array <VkDescriptorSet> &descriptor_sets);
 };
 
 struct Vulkan_Context {
@@ -147,4 +158,4 @@ VkShaderModule vulkan_create_shader_module_from_binary(VkDevice device, String f
 bool vulkan_image_memory_barrier(VkCommandBuffer buffer, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
 VkSampler vulkan_create_texture_sampler(VkDevice device, VkFilter min_filter, VkFilter mag_filter, VkSamplerAddressMode address_mode);
 
-void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index, Array <VkDescriptorSet> const &descriptor_sets);
+void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index, Array <VkDescriptorSet> const &per_scene_descriptor_sets, Array <VkDescriptorSet> const &descriptor_sets);

@@ -5,8 +5,13 @@
 
 #include <stdio.h>
 
-struct Uniform_Data {
-    Matrix4 wvp;
+struct Per_Scene_Uniform_Data {
+    Matrix4 projection_matrix;
+    Matrix4 view_matrix;
+};
+
+struct Per_Object_Uniform_Data {
+    Matrix4 world_matrix;
 };
 
 struct Vertex {
@@ -62,6 +67,13 @@ int main(int argc, char *argv[]) {
     if (!load_mesh_gltf(&mesh, "data/meshes/Demon.gltf")) return 1;
 
     Vulkan_Graphics_Pipeline pipeline(context.device, globals.window);
+
+    Array <Vulkan_Buffer_And_Memory> per_scene_uniform_buffers;
+    if (!context.create_uniform_buffers(per_scene_uniform_buffers, sizeof(Per_Scene_Uniform_Data))) return 1;
+
+    Array <VkDescriptorSet> per_scene_descriptor_sets;
+    if (!pipeline.allocate_per_scene_descriptor_sets(per_scene_descriptor_sets, context.images.count)) return 1;
+    pipeline.update_per_scene_descriptor_sets(per_scene_uniform_buffers, per_scene_descriptor_sets);
     
     for (int i = 0; i < mesh.num_submeshes; i++) {
         Submesh *submesh = &mesh.submeshes[i];
@@ -75,7 +87,7 @@ int main(int argc, char *argv[]) {
         submesh->index_buffer  = context.create_vertex_buffer(submesh->indices, submesh->index_buffer_size);
         if (!submesh->index_buffer.is_valid) return 1;
 
-        if (!context.create_uniform_buffers(submesh->uniform_buffers, sizeof(Uniform_Data))) return 1;
+        if (!context.create_uniform_buffers(submesh->uniform_buffers, sizeof(Per_Object_Uniform_Data))) return 1;
 
         if (submesh->material.diffuse_texture_name) {
             char full_path[4096];
@@ -90,10 +102,6 @@ int main(int argc, char *argv[]) {
     }
     
     if (!pipeline.init(render_pass, vs, fs)) return 1;
-
-    for (int i = 0; i < mesh.num_submeshes; i++) {
-        Submesh *submesh = &mesh.submeshes[i];
-    }
     
     // Record command buffers
     {
@@ -122,7 +130,7 @@ int main(int argc, char *argv[]) {
 
             for (int j = 0; j < mesh.num_submeshes; j++) {
                 Submesh *submesh = &mesh.submeshes[j];
-                vulkan_cmd_bind_pipeline(command_buffers[i], &pipeline, i, submesh->descriptor_sets);
+                vulkan_cmd_bind_pipeline(command_buffers[i], &pipeline, i, per_scene_descriptor_sets, submesh->descriptor_sets);
                 vkCmdDraw(command_buffers[i], submesh->num_indices, 1, 0, 0);
             }
             
@@ -186,20 +194,23 @@ int main(int argc, char *argv[]) {
         int image_index = command_queue->acquire_next_image();
         if (image_index == -1) return 1;
 
-        static float foo = 0.0f;
-        Matrix4 rotation_matrix = make_z_rotation(foo);
-        //foo += 0.001f;
+        Per_Scene_Uniform_Data per_scene_uniforms;
+        per_scene_uniforms.projection_matrix = make_perspective((float)globals.window->width / (float)globals.window->height, 45.0f, 0.1f, 1000.0f);
+        per_scene_uniforms.projection_matrix._22 *= -1.0f; // Flip the y because Vulkan is left-handed by default
+        per_scene_uniforms.view_matrix = matrix4_identity();
+
+        per_scene_uniforms.projection_matrix = transpose(per_scene_uniforms.projection_matrix);
+        per_scene_uniforms.view_matrix = transpose(per_scene_uniforms.view_matrix);
+
+        per_scene_uniform_buffers[image_index].update(context.device, &per_scene_uniforms, sizeof(Per_Scene_Uniform_Data));
         
-        Matrix4 projection_matrix = make_perspective((float)globals.window->width / (float)globals.window->height, 45.0f, 0.1f, 1000.0f);
-        projection_matrix._22 *= -1.0f; // Flip the y because Vulkan is left-handed by default
-        
-        Matrix4 world_matrix = make_transformation_matrix(v3(0, -2, -10), v3(0, 0, 0), v3(1, 1, 1));
-        Matrix4 wvp = projection_matrix * world_matrix;
-        wvp = transpose(wvp);
+        Per_Object_Uniform_Data per_object_uniforms;
+        per_object_uniforms.world_matrix = make_transformation_matrix(v3(0, -2, -10), v3(0, 0, 0), v3(1, 1, 1));
+        per_object_uniforms.world_matrix = transpose(per_object_uniforms.world_matrix);
 
         for (int i = 0; i < mesh.num_submeshes; i++) {
             Submesh *submesh = &mesh.submeshes[i];
-            if (!submesh->uniform_buffers[image_index].update(context.device, &wvp, sizeof(wvp))) return 1;
+            if (!submesh->uniform_buffers[image_index].update(context.device, &per_object_uniforms, sizeof(Per_Object_Uniform_Data))) return 1;
         }
         
         command_queue->submit_async(command_buffers[image_index]);

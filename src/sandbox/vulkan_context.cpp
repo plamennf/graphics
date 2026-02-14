@@ -1396,8 +1396,13 @@ bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs,
     VkPipelineLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-    layout_info.setLayoutCount = 1;
-    layout_info.pSetLayouts = &descriptor_set_layout;
+    VkDescriptorSetLayout layouts[] = {
+        per_scene_descriptor_set_layout,
+        descriptor_set_layout,
+    };
+    
+    layout_info.setLayoutCount = ArrayCount(layouts);
+    layout_info.pSetLayouts = layouts;
     
     CHECK_VK_RESULT(vkCreatePipelineLayout(device, &layout_info, NULL, &pipeline_layout), "Failed to create graphics pipeline layout");
     
@@ -1427,19 +1432,19 @@ bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs,
 
 bool Vulkan_Graphics_Pipeline::allocate_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images) {
     // Create descriptor pool
-    VkDescriptorPoolSize pool_sizes[NUM_BINDINGS] = {};
+    VkDescriptorPoolSize pool_sizes[NUM_PER_OBJECT_BINDINGS] = {};
     
-    pool_sizes[BINDING_VERTEX_BUFFER].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pool_sizes[BINDING_VERTEX_BUFFER].descriptorCount = num_images;
+    pool_sizes[PER_OBJECT_BINDING_VERTEX_BUFFER].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_sizes[PER_OBJECT_BINDING_VERTEX_BUFFER].descriptorCount = num_images;
 
-    pool_sizes[BINDING_INDEX_BUFFER].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pool_sizes[BINDING_INDEX_BUFFER].descriptorCount = num_images;
+    pool_sizes[PER_OBJECT_BINDING_INDEX_BUFFER].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_sizes[PER_OBJECT_BINDING_INDEX_BUFFER].descriptorCount = num_images;
 
-    pool_sizes[BINDING_UNIFORM].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pool_sizes[BINDING_UNIFORM].descriptorCount = num_images;
+    pool_sizes[PER_OBJECT_BINDING_UNIFORM].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_sizes[PER_OBJECT_BINDING_UNIFORM].descriptorCount = num_images;
 
-    pool_sizes[BINDING_TEXTURE].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    pool_sizes[BINDING_TEXTURE].descriptorCount = num_images;
+    pool_sizes[PER_OBJECT_BINDING_TEXTURE].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    pool_sizes[PER_OBJECT_BINDING_TEXTURE].descriptorCount = num_images;
     
     VkDescriptorPoolCreateInfo pool_create_info = {};
     pool_create_info.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1454,28 +1459,28 @@ bool Vulkan_Graphics_Pipeline::allocate_descriptor_sets(Array <VkDescriptorSet> 
     layout_bindings.use_temporary_storage = true;
     
     VkDescriptorSetLayoutBinding vertex_shader_layout_binding_vertex_buffer = {};
-    vertex_shader_layout_binding_vertex_buffer.binding = BINDING_VERTEX_BUFFER;
+    vertex_shader_layout_binding_vertex_buffer.binding = PER_OBJECT_BINDING_VERTEX_BUFFER;
     vertex_shader_layout_binding_vertex_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertex_shader_layout_binding_vertex_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_vertex_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layout_bindings.add(vertex_shader_layout_binding_vertex_buffer);
 
     VkDescriptorSetLayoutBinding vertex_shader_layout_binding_index_buffer = {};
-    vertex_shader_layout_binding_index_buffer.binding = BINDING_INDEX_BUFFER;
+    vertex_shader_layout_binding_index_buffer.binding = PER_OBJECT_BINDING_INDEX_BUFFER;
     vertex_shader_layout_binding_index_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertex_shader_layout_binding_index_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_index_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layout_bindings.add(vertex_shader_layout_binding_index_buffer);
 
     VkDescriptorSetLayoutBinding vertex_shader_layout_binding_uniform_buffer = {};
-    vertex_shader_layout_binding_uniform_buffer.binding = BINDING_UNIFORM;
+    vertex_shader_layout_binding_uniform_buffer.binding = PER_OBJECT_BINDING_UNIFORM;
     vertex_shader_layout_binding_uniform_buffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     vertex_shader_layout_binding_uniform_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_uniform_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layout_bindings.add(vertex_shader_layout_binding_uniform_buffer);
 
     VkDescriptorSetLayoutBinding fragment_shader_layout_binding = {};
-    fragment_shader_layout_binding.binding = BINDING_TEXTURE;
+    fragment_shader_layout_binding.binding = PER_OBJECT_BINDING_TEXTURE;
     fragment_shader_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     fragment_shader_layout_binding.descriptorCount = 1;
     fragment_shader_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1512,7 +1517,7 @@ bool Vulkan_Graphics_Pipeline::allocate_descriptor_sets(Array <VkDescriptorSet> 
 void Vulkan_Graphics_Pipeline::update_descriptor_sets(Vulkan_Buffer_And_Memory vertex_buffer, Vulkan_Buffer_And_Memory index_buffer, Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Vulkan_Texture texture, Array <VkDescriptorSet> &descriptor_sets) {
     Array <VkWriteDescriptorSet> write_descriptor_set;
     write_descriptor_set.use_temporary_storage = true;
-    write_descriptor_set.resize(descriptor_sets.count * NUM_BINDINGS);
+    write_descriptor_set.resize(descriptor_sets.count * NUM_PER_OBJECT_BINDINGS);
 
     VkDescriptorBufferInfo buffer_info_vertex_buffer = {};
     buffer_info_vertex_buffer.buffer = vertex_buffer.buffer;
@@ -1546,7 +1551,7 @@ void Vulkan_Graphics_Pipeline::update_descriptor_sets(Vulkan_Buffer_And_Memory v
         VkWriteDescriptorSet wds = {};
         wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         wds.dstSet = dst_set;
-        wds.dstBinding = BINDING_VERTEX_BUFFER;
+        wds.dstBinding = PER_OBJECT_BINDING_VERTEX_BUFFER;
         wds.dstArrayElement = 0;
         wds.descriptorCount = 1;
         wds.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -1555,20 +1560,20 @@ void Vulkan_Graphics_Pipeline::update_descriptor_sets(Vulkan_Buffer_And_Memory v
         Assert(wds_index < write_descriptor_set.count);
         write_descriptor_set[wds_index++] = wds;
 
-        wds.dstBinding = BINDING_INDEX_BUFFER;
+        wds.dstBinding = PER_OBJECT_BINDING_INDEX_BUFFER;
         wds.pBufferInfo = &buffer_info_index_buffer;
 
         Assert(wds_index < write_descriptor_set.count);
         write_descriptor_set[wds_index++] = wds;
 
-        wds.dstBinding = BINDING_UNIFORM;
+        wds.dstBinding = PER_OBJECT_BINDING_UNIFORM;
         wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         wds.pBufferInfo = &buffer_info_uniforms[i];
             
         Assert(wds_index < write_descriptor_set.count);
         write_descriptor_set[wds_index++] = wds;
 
-        wds.dstBinding = BINDING_TEXTURE;
+        wds.dstBinding = PER_OBJECT_BINDING_TEXTURE;
         wds.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         wds.pImageInfo = &image_info;
 
@@ -1576,7 +1581,97 @@ void Vulkan_Graphics_Pipeline::update_descriptor_sets(Vulkan_Buffer_And_Memory v
         write_descriptor_set[wds_index++] = wds;
     }
 
-    vkUpdateDescriptorSets(device, (u32)write_descriptor_set.count, write_descriptor_set.data, 0, NULL);;
+    vkUpdateDescriptorSets(device, (u32)write_descriptor_set.count, write_descriptor_set.data, 0, NULL);
+}
+
+// Copy-paste from above
+bool Vulkan_Graphics_Pipeline::allocate_per_scene_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images) {
+    VkDescriptorPoolSize pool_sizes[NUM_PER_SCENE_BINDINGS] = {};
+
+    pool_sizes[PER_SCENE_BINDING_UNIFORM].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_sizes[PER_SCENE_BINDING_UNIFORM].descriptorCount = num_images;
+
+    VkDescriptorPoolCreateInfo pool_create_info = {};
+    pool_create_info.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_create_info.maxSets = (u32)num_images;
+    pool_create_info.poolSizeCount = ArrayCount(pool_sizes);
+    pool_create_info.pPoolSizes = pool_sizes;
+    CHECK_VK_RESULT(vkCreateDescriptorPool(device, &pool_create_info, NULL, &per_scene_descriptor_pool), "Failed to create vulkan per scene descriptor pool");
+    logprintf("Vulkan per scene descriptor pool created!\n");
+
+    Array <VkDescriptorSetLayoutBinding> layout_bindings;
+    layout_bindings.use_temporary_storage = true;
+
+    VkDescriptorSetLayoutBinding vertex_shader_layout_binding_uniform_buffer = {};
+    vertex_shader_layout_binding_uniform_buffer.binding = PER_SCENE_BINDING_UNIFORM;
+    vertex_shader_layout_binding_uniform_buffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    vertex_shader_layout_binding_uniform_buffer.descriptorCount = 1;
+    vertex_shader_layout_binding_uniform_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    layout_bindings.add(vertex_shader_layout_binding_uniform_buffer);
+
+    VkDescriptorSetLayoutCreateInfo layout_info = {};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.bindingCount = (u32)layout_bindings.count;
+    layout_info.pBindings = layout_bindings.data;
+    
+    CHECK_VK_RESULT(vkCreateDescriptorSetLayout(device, &layout_info, NULL, &per_scene_descriptor_set_layout), "Failed to create vulkan per scene descriptor set layout");
+
+    Array <VkDescriptorSetLayout> layouts;
+    layouts.use_temporary_storage = true;
+    layouts.resize(num_images);
+    for (int i = 0; i < layouts.count; i++) {
+        layouts[i] = per_scene_descriptor_set_layout;
+    }
+
+    VkDescriptorSetAllocateInfo allocate_info = {};
+    allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocate_info.descriptorPool = per_scene_descriptor_pool;
+    allocate_info.descriptorSetCount = (u32)num_images;
+    allocate_info.pSetLayouts = layouts.data;
+
+    descriptor_sets.resize(num_images);
+    
+    CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocate_info, descriptor_sets.data), "Failed to allocate vulkan descriptor sets");
+        
+    return true;
+
+}
+
+void Vulkan_Graphics_Pipeline::update_per_scene_descriptor_sets(Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Array <VkDescriptorSet> &descriptor_sets) {
+    Array <VkWriteDescriptorSet> write_descriptor_set;
+    write_descriptor_set.use_temporary_storage = true;
+    write_descriptor_set.resize(descriptor_sets.count * NUM_PER_SCENE_BINDINGS);
+
+    Array <VkDescriptorBufferInfo> buffer_info_uniforms;
+    buffer_info_uniforms.use_temporary_storage = true;
+    buffer_info_uniforms.resize(descriptor_sets.count);
+
+    for (int i = 0; i < descriptor_sets.count; i++) {
+        VkDescriptorBufferInfo info = {};
+        info.buffer = uniform_buffers[i].buffer;
+        info.range  = uniform_buffers[i].size;
+        buffer_info_uniforms[i] = info;
+    }
+
+    int wds_index = 0;
+    
+    for (int i = 0; i < descriptor_sets.count; i++) {
+        VkDescriptorSet dst_set = descriptor_sets[i];
+
+        VkWriteDescriptorSet wds = {};
+        wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wds.dstSet = dst_set;
+        wds.dstBinding = PER_SCENE_BINDING_UNIFORM;
+        wds.dstArrayElement = 0;
+        wds.descriptorCount = 1;
+        wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        wds.pBufferInfo = &buffer_info_uniforms[i];
+            
+        Assert(wds_index < write_descriptor_set.count);
+        write_descriptor_set[wds_index++] = wds;
+    }
+
+    vkUpdateDescriptorSets(device, (u32)write_descriptor_set.count, write_descriptor_set.data, 0, NULL);
 }
 
 bool Vulkan_Buffer_And_Memory::update(VkDevice device, void *data, u32 size) {
@@ -1622,13 +1717,17 @@ void Vulkan_Texture::destroy(VkDevice device) {
     }
 }
 
-void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index, Array <VkDescriptorSet> const &descriptor_sets) {
+void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index, Array <VkDescriptorSet> const &per_scene_descriptor_sets, Array <VkDescriptorSet> const &descriptor_sets) {
     Assert(pipeline);
     
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
     if (descriptor_sets.count > 0) {
         vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pipeline->pipeline_layout, 0, 1,
+                                &per_scene_descriptor_sets[image_index], 0, NULL);
+        
+        vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pipeline->pipeline_layout, 1, 1,
                                 &descriptor_sets[image_index], 0, NULL);
     }
 }
