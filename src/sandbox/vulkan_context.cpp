@@ -9,7 +9,41 @@
 #include <vulkan/vulkan_win32.h>
 #endif
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include <stdio.h>
+
+static bool has_stencil_component(VkFormat format) {
+	return ((format == VK_FORMAT_D32_SFLOAT_S8_UINT) || 
+		    (format == VK_FORMAT_D24_UNORM_S8_UINT));
+}
+
+static int get_bpp(VkFormat format) {
+    switch (format) {
+        case VK_FORMAT_R8_SINT:
+        case VK_FORMAT_R8_UNORM:
+            return 1;
+            
+        case VK_FORMAT_R16_SFLOAT:
+            return 2;
+
+        case VK_FORMAT_R16G16_SFLOAT:
+        case VK_FORMAT_R16G16_SNORM:
+        case VK_FORMAT_B8G8R8A8_UNORM:
+        case VK_FORMAT_R8G8B8A8_UNORM:
+            return 4;
+
+        case VK_FORMAT_R16G16B16A16_SFLOAT:
+            return 4 * sizeof(uint16_t);
+
+        case VK_FORMAT_R32G32B32A32_SFLOAT:
+            return 4 * sizeof(float);
+    }
+
+    Assert(!"Unknown vulkan format");
+    return 0;
+}
 
 static const char *get_debug_message_severity_string(VkDebugUtilsMessageSeverityFlagBitsEXT severity) {
 	switch (severity) {
@@ -527,6 +561,7 @@ bool Vulkan_Context::create_swap_chain() {
 bool Vulkan_Context::create_command_buffer_pool() {
     VkCommandPoolCreateInfo create_info = {};
     create_info.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    create_info.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     create_info.queueFamilyIndex = queue_family;
 
     CHECK_VK_RESULT(vkCreateCommandPool(device, &create_info, NULL, &command_buffer_pool), "Failed to create command buffer pool");
@@ -740,6 +775,329 @@ Vulkan_Buffer_And_Memory Vulkan_Context::create_uniform_buffer(VkDeviceSize size
     VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     VkMemoryPropertyFlags memory_properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     return create_buffer(size, usage, memory_properties);
+}
+
+Vulkan_Texture Vulkan_Context::create_texture(String filepath) {
+    int width, height, channels;
+    stbi_set_flip_vertically_on_load(1);
+    stbi_uc *data = stbi_load(temp_c_string(filepath), &width, &height, &channels, 4);
+    if (!data) {
+        logprintf("Failed to load image '%s'\n", temp_c_string(filepath));
+        return {};
+    }
+    defer { stbi_image_free(data); };
+
+    Vulkan_Texture result = {};
+    
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+
+    // Create texture image from data(texture, data, width, height, format)
+    result = create_texture_image_from_data(data, width, height, format);
+    if (!result.is_valid) {
+        return {};
+    }
+    
+    VkImageAspectFlags aspect_flags = VK_IMAGE_ASPECT_COLOR_BIT;
+    result.view = create_image_view(device, result.image, format, aspect_flags, VK_IMAGE_VIEW_TYPE_2D, 1, 1);
+    if (!result.view) {
+        result.destroy(device);
+        return {};
+    }
+    
+    VkFilter min_filter = VK_FILTER_LINEAR;
+    VkFilter mag_filter = VK_FILTER_LINEAR;
+    VkSamplerAddressMode address_mode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    result.sampler = vulkan_create_texture_sampler(device, min_filter, mag_filter, address_mode);
+    if (!result.sampler) {
+        result.destroy(device);
+        return {};
+    }
+
+    logprintf("Texture '%s' was created!\n", temp_c_string(filepath));
+    
+    result.is_valid = true;
+    
+    return result;
+}
+
+Vulkan_Texture Vulkan_Context::create_texture_image_from_data(void *data, int width, int height, VkFormat format) {
+    VkImageUsageFlagBits usage = (VkImageUsageFlagBits)(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    VkMemoryPropertyFlagBits property_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    Vulkan_Texture result = create_image(width, height, format, usage, property_flags);
+    if (!result.is_valid) return {};
+
+    update_texture_image(&result, width, height, format, data);
+
+    return result;
+}
+
+Vulkan_Texture Vulkan_Context::create_image(int width, int height, VkFormat format, VkImageUsageFlags usage_flags, VkMemoryPropertyFlagBits property_flags) {
+    VkImageCreateInfo image_create_info = {};
+    image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_create_info.imageType = VK_IMAGE_TYPE_2D;
+    image_create_info.format = format;
+    image_create_info.extent.width = width;
+    image_create_info.extent.height = height;
+    image_create_info.extent.depth = 1;
+    image_create_info.mipLevels = 1;
+    image_create_info.arrayLayers = 1;
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+    image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+    image_create_info.usage = usage_flags;
+    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    image_create_info.queueFamilyIndexCount = 0;
+    image_create_info.pQueueFamilyIndices = NULL;
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    Vulkan_Texture result;
+    if (vkCreateImage(device, &image_create_info, NULL, &result.image) != VK_SUCCESS) {
+        logprintf("Failed to create vulkan image!\n");
+        result.destroy(device);
+        return {};
+    }
+
+    VkMemoryRequirements memory_requirements = {};
+    vkGetImageMemoryRequirements(device, result.image, &memory_requirements);
+    logprintf("Image requires %d bytes\n", (int)memory_requirements.size);
+
+    u32 memory_type_index = get_memory_type_index(memory_requirements.memoryTypeBits, property_flags);
+    logprintf("Image memory type index: %d\n", memory_type_index);
+
+    VkMemoryAllocateInfo memory_allocate_info = {};
+    memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memory_allocate_info.allocationSize = memory_requirements.size;
+    memory_allocate_info.memoryTypeIndex = memory_type_index;
+
+    if (vkAllocateMemory(device, &memory_allocate_info, NULL, &result.memory) != VK_SUCCESS) {
+        logprintf("Failed to allocate memory for vulkan texture!\n");
+        result.destroy(device);
+        return {};
+    }
+
+    if (vkBindImageMemory(device, result.image, result.memory, 0) != VK_SUCCESS) {
+        logprintf("Failed to bind memory to vulkan texture!\n");
+        result.destroy(device);
+        return {};        
+    }
+
+    result.is_valid = true;
+    
+    return result;
+}
+
+bool Vulkan_Context::update_texture_image(Vulkan_Texture *texture, int width, int height, VkFormat format, void *data) {
+    int bpp = get_bpp(format);
+
+    VkDeviceSize layer_size = (VkDeviceSize)width * (VkDeviceSize)height * (VkDeviceSize)bpp;
+    int layer_count = 1;
+    VkDeviceSize image_size = layer_count * layer_size;
+
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    Vulkan_Buffer_And_Memory staging_buffer = create_buffer(image_size, usage, properties);
+    defer { staging_buffer.destroy(device); };
+    staging_buffer.update(device, data, (u32)image_size);
+
+    if (!transition_image_layout(texture->image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) return false;
+    
+    copy_buffer_to_image(texture->image, staging_buffer.buffer, width, height);
+    transition_image_layout(texture->image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    return true;
+}
+
+bool Vulkan_Context::transition_image_layout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) {
+    if (!vulkan_begin_command_buffer(copy_command_buffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)) return false;
+    if (!vulkan_image_memory_barrier(copy_command_buffer, image, format, old_layout, new_layout)) return false;
+    submit_copy_command();
+    return true;
+}
+
+// Copied from ogldev Vulkan For Beginners #18 19:09
+bool vulkan_image_memory_barrier(VkCommandBuffer buffer, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout) {
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = old_layout;
+    barrier.newLayout = new_layout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = 1;
+
+    VkPipelineStageFlags source_stage;
+    VkPipelineStageFlags destination_stage;
+
+    if (new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+        format == VK_FORMAT_D16_UNORM ||
+        format == VK_FORMAT_X8_D24_UNORM_PACK32 ||
+        format == VK_FORMAT_D32_SFLOAT ||
+        format == VK_FORMAT_S8_UINT ||
+        format == VK_FORMAT_D16_UNORM_S8_UINT ||
+        format == VK_FORMAT_D24_UNORM_S8_UINT) {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+
+        if (has_stencil_component(format)) {
+            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+        }
+    } else {
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    }
+
+    if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_GENERAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	}
+
+	if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && 
+		new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) { /* Convert back from read-only to updateable */
+		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		destination_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}  else if (old_layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && 
+		     new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) { /* Convert from updateable texture to shader read-only */
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) { /* Convert depth texture from undefined state to depth-stencil buffer */
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destination_stage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) { /* Wait for render pass to complete */
+		barrier.srcAccessMask = 0; // VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = 0;
+		/*
+          source_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+          ///		destination_stage = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT;
+          destination_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		*/
+		source_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) { /* Convert back from read-only to color attachment */
+		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		destination_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) { /* Convert from updateable texture to shader read-only */
+		barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) { /* Convert back from read-only to depth attachment */
+		barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		destination_stage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) { /* Convert from updateable depth texture to shader read-only */
+		barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		destination_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED && new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		source_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destination_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	} else if (old_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL && new_layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+		barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		barrier.dstAccessMask = 0;
+
+		source_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		destination_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+	} else {
+		logprintf("Unknown barrier case\n");
+        return false;
+	}
+
+    vkCmdPipelineBarrier(buffer, source_stage, destination_stage, 0, 0, NULL, 0, NULL, 1, &barrier);
+
+    return true;
+}
+
+VkSampler vulkan_create_texture_sampler(VkDevice device, VkFilter min_filter, VkFilter mag_filter, VkSamplerAddressMode address_mode) {
+    VkSamplerCreateInfo sampler_info = {};
+    sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    sampler_info.minFilter = min_filter;
+    sampler_info.magFilter = mag_filter;
+    sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    sampler_info.addressModeU = address_mode;
+    sampler_info.addressModeV = address_mode;
+    sampler_info.addressModeW = address_mode;
+    sampler_info.maxAnisotropy = 1;
+    sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+    sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+
+    VkSampler result;
+    if (vkCreateSampler(device, &sampler_info, VK_NULL_HANDLE, &result) != VK_SUCCESS) {
+        logprintf("Failed to create vulkan texture sampler!\n");
+        return NULL;
+    }
+
+    return result;
+}
+
+bool Vulkan_Context::copy_buffer_to_buffer(VkBuffer dst, VkBuffer src, VkDeviceSize size) {
+    if (!vulkan_begin_command_buffer(copy_command_buffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)) return false;
+
+    VkBufferCopy buffer_copy = {};
+    buffer_copy.size = size;
+
+    vkCmdCopyBuffer(copy_command_buffer, src, dst, 1, &buffer_copy);
+
+    submit_copy_command();
+
+    return true;
+}
+
+bool Vulkan_Context::copy_buffer_to_image(VkImage dst, VkBuffer src, int width, int height) {
+    if (!vulkan_begin_command_buffer(copy_command_buffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)) return false;
+
+    VkBufferImageCopy buffer_image_copy = {};
+    buffer_image_copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    buffer_image_copy.imageSubresource.layerCount = 1;
+    buffer_image_copy.imageExtent.width = width;
+    buffer_image_copy.imageExtent.height = height;
+    buffer_image_copy.imageExtent.depth = 1;
+
+    vkCmdCopyBufferToImage(copy_command_buffer, src, dst, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &buffer_image_copy);
+
+    submit_copy_command();
+
+    return true;
+}
+
+void Vulkan_Context::submit_copy_command() {
+    vkEndCommandBuffer(copy_command_buffer);
+    command_queue.submit_sync(copy_command_buffer);
+    command_queue.wait_idle();
 }
 
 bool vulkan_begin_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferUsageFlags usage_flags) {
@@ -983,13 +1341,16 @@ bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, Vk
 
 bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size) {
     // Create descriptor pool(num_images)
-    VkDescriptorPoolSize pool_sizes[2] = {};
+    VkDescriptorPoolSize pool_sizes[3] = {};
     
     pool_sizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     pool_sizes[0].descriptorCount = num_images;
 
     pool_sizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     pool_sizes[1].descriptorCount = num_images;
+
+    pool_sizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    pool_sizes[2].descriptorCount = num_images;
     
     VkDescriptorPoolCreateInfo pool_create_info = {};
     pool_create_info.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1016,7 +1377,14 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
     vertex_shader_layout_binding_uniform_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_uniform_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layout_bindings.add(vertex_shader_layout_binding_uniform_buffer);
-        
+
+    VkDescriptorSetLayoutBinding fragment_shader_layout_binding = {};
+    fragment_shader_layout_binding.binding = 2;
+    fragment_shader_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    fragment_shader_layout_binding.descriptorCount = 1;
+    fragment_shader_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    layout_bindings.add(fragment_shader_layout_binding);    
+    
     VkDescriptorSetLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layout_info.bindingCount = (u32)layout_bindings.count;
@@ -1047,6 +1415,11 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
     buffer_info_vertex_buffer.buffer = mesh->vertex_buffer.buffer;
     buffer_info_vertex_buffer.offset = 0;
     buffer_info_vertex_buffer.range  = mesh->vertex_buffer_size;
+
+    VkDescriptorImageInfo image_info = {};
+    image_info.sampler = mesh->texture.sampler;
+    image_info.imageView = mesh->texture.view;
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     
     Array <VkWriteDescriptorSet> write_descriptor_sets;
     write_descriptor_sets.use_temporary_storage = true;
@@ -1076,6 +1449,17 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
         uniform_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         uniform_descriptor_set.pBufferInfo = &buffer_info_uniform;
         write_descriptor_sets.add(uniform_descriptor_set);
+
+        VkWriteDescriptorSet image_descriptor_set = {};
+        image_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        image_descriptor_set.dstSet = descriptor_sets[i];
+        image_descriptor_set.dstBinding = 2;
+        image_descriptor_set.dstArrayElement = 0;
+        image_descriptor_set.descriptorCount = 1;
+        image_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        image_descriptor_set.pImageInfo = &image_info;
+        write_descriptor_sets.add(image_descriptor_set);
+
     }
     
     vkUpdateDescriptorSets(device, (u32)write_descriptor_sets.count, write_descriptor_sets.data, 0, NULL);
@@ -1100,6 +1484,30 @@ void Vulkan_Buffer_And_Memory::destroy(VkDevice device) {
 	if (buffer) {
 		vkDestroyBuffer(device, buffer, NULL);
 	}
+
+    is_valid = false;
+}
+
+void Vulkan_Texture::destroy(VkDevice device) {
+    if (sampler != VK_NULL_HANDLE) {
+        vkDestroySampler(device, sampler, NULL);
+        sampler = VK_NULL_HANDLE;
+    }
+
+    if (view != VK_NULL_HANDLE) {
+        vkDestroyImageView(device, view, NULL);
+        view = VK_NULL_HANDLE;
+    }
+
+    if (image != VK_NULL_HANDLE) {
+        vkDestroyImage(device, image, NULL);
+        image = VK_NULL_HANDLE;
+    }
+
+    if (memory != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory, NULL);
+        memory = VK_NULL_HANDLE;
+    }
 }
 
 void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index) {

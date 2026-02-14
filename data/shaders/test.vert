@@ -13,10 +13,13 @@ layout (set = 0, binding = 1) readonly uniform Uniform_Buffer {
     mat4 wvp;
 } ubo;
 
+layout (location = 0) out vec2 out_uv;
+
 void main() {
     Vertex_Data vertex = in_vertices.data[gl_VertexIndex];
 
-    vec3 pos = vec3(vertex.x, vertex.y, vertex.z);
-    
+    vec3 pos = vec3(vertex.x, vertex.y, vertex.z);    
     gl_Position = ubo.wvp * vec4(pos, 1.0);
+
+    out_uv = vec2(vertex.u, vertex.v);
 }

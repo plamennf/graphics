@@ -61,6 +61,16 @@ struct Vulkan_Graphics_Pipeline {
     bool create_descriptor_sets(Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size);
 };
 
+struct Vulkan_Texture {
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
+    bool is_valid = false;
+    
+    void destroy(VkDevice device);
+};
+
 struct Vulkan_Context {
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debug_messenger = VK_NULL_HANDLE;
@@ -84,6 +94,9 @@ struct Vulkan_Context {
     bool create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window);
     Vulkan_Buffer_And_Memory create_vertex_buffer(void *data, u32 size);
     bool create_uniform_buffers(Array <Vulkan_Buffer_And_Memory> &buffers, u32 size);
+
+    Vulkan_Texture create_texture(String filepath);
+    Vulkan_Texture create_texture_image_from_data(void *data, int width, int height, VkFormat format);
     
 private:
     bool create_instance();
@@ -97,6 +110,16 @@ private:
     bool copy_buffer(VkBuffer destination, VkBuffer source, VkDeviceSize size);
 
     Vulkan_Buffer_And_Memory create_uniform_buffer(VkDeviceSize size);
+
+    Vulkan_Texture create_image(int width, int height, VkFormat format, VkImageUsageFlags usage_flags, VkMemoryPropertyFlagBits property_flags);
+    bool update_texture_image(Vulkan_Texture *texture, int width, int height, VkFormat format, void *data);
+
+    bool transition_image_layout(VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+
+    bool copy_buffer_to_buffer(VkBuffer dst, VkBuffer src, VkDeviceSize size);
+    bool copy_buffer_to_image(VkImage dst, VkBuffer src, int width, int height);
+    
+    void submit_copy_command();
     
     u32 get_memory_type_index(u32 memory_type_bits_mask, VkMemoryPropertyFlags required_memory_property_flags);
 };
@@ -104,5 +127,7 @@ private:
 bool vulkan_begin_command_buffer(VkCommandBuffer command_buffer, VkCommandBufferUsageFlags usage_flags);
 VkSemaphore vulkan_create_semaphore(VkDevice device);
 VkShaderModule vulkan_create_shader_module_from_binary(VkDevice device, String filename);
+bool vulkan_image_memory_barrier(VkCommandBuffer buffer, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
+VkSampler vulkan_create_texture_sampler(VkDevice device, VkFilter min_filter, VkFilter mag_filter, VkSamplerAddressMode address_mode);
 
 void vulkan_cmd_bind_pipeline(VkCommandBuffer buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index);

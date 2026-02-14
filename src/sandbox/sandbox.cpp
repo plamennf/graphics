@@ -46,12 +46,19 @@ int main(int argc, char *argv[]) {
     Vertex vertices[] = {
         { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
         { { +1.0f, -1.0f, 0.0f }, { 0.0f, 1.0f } },
-        { { +0.0f, +1.0f, 0.0f }, { 1.0f, 1.0f } },
+        { { +1.0f, +1.0f, 0.0f }, { 1.0f, 1.0f } },
+
+        { { -1.0f, -1.0f, 0.0f }, { 0.0f, 0.0f } },
+        { { +1.0f, +1.0f, 0.0f }, { 1.0f, 1.0f } },
+        { { -1.0f, +1.0f, 0.0f }, { 0.0f, 1.0f } },
     };
 
     Mesh mesh = {};
     mesh.vertex_buffer_size = sizeof(vertices);
     mesh.vertex_buffer      = context.create_vertex_buffer(vertices, sizeof(vertices));
+    if (!mesh.vertex_buffer.is_valid) return 1;
+    mesh.texture            = context.create_texture("data/textures/Building 2.png");
+    if (!mesh.texture.is_valid) return 1;
     
     Array <Vulkan_Buffer_And_Memory> uniform_buffers;
     if (!context.create_uniform_buffers(uniform_buffers, sizeof(Uniform_Data))) return 1;
@@ -87,7 +94,7 @@ int main(int argc, char *argv[]) {
 
             vulkan_cmd_bind_pipeline(command_buffers[i], &pipeline, i);
 
-            vkCmdDraw(command_buffers[i], 3, 1, 0, 0);
+            vkCmdDraw(command_buffers[i], 6, 1, 0, 0);
             
             vkCmdEndRenderPass(command_buffers[i]);
             
