@@ -2,6 +2,14 @@
 
 struct Mesh;
 
+enum Vulkan_Descriptor_Bindings {
+    BINDING_VERTEX_BUFFER,
+    BINDING_INDEX_BUFFER,
+    BINDING_UNIFORM,
+    BINDING_TEXTURE,
+    NUM_BINDINGS
+};
+
 struct Vulkan_Physical_Device {
     VkPhysicalDevice device = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties properties;
@@ -44,22 +52,11 @@ struct Vulkan_Buffer_And_Memory {
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkDeviceSize allocation_size = 0;
+    u32 size = 0;
     bool is_valid = false;
 
     bool update(VkDevice device, void *data, u32 size);
     void destroy(VkDevice device);
-};
-
-struct Vulkan_Graphics_Pipeline {
-    VkDevice device = VK_NULL_HANDLE;
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
-    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
-    Array <VkDescriptorSet> descriptor_sets;
-    
-    bool init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size);
-    bool create_descriptor_sets(Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size);
 };
 
 struct Vulkan_Texture {
@@ -70,6 +67,22 @@ struct Vulkan_Texture {
     bool is_valid = false;
     
     void destroy(VkDevice device);
+};
+
+struct Vulkan_Graphics_Pipeline {
+    Platform_Window *window = NULL;
+    VkDevice device = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+    VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
+
+    Vulkan_Graphics_Pipeline(VkDevice device, Platform_Window *window) : window(window), device(device) {}
+    
+    bool init(VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs);
+    
+    bool allocate_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images);
+    void update_descriptor_sets(Vulkan_Buffer_And_Memory vertex_buffer, Vulkan_Buffer_And_Memory index_buffer, Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Vulkan_Texture texture, Array <VkDescriptorSet> &descriptor_sets);
 };
 
 struct Vulkan_Context {
@@ -134,4 +147,4 @@ VkShaderModule vulkan_create_shader_module_from_binary(VkDevice device, String f
 bool vulkan_image_memory_barrier(VkCommandBuffer buffer, VkImage image, VkFormat format, VkImageLayout old_layout, VkImageLayout new_layout);
 VkSampler vulkan_create_texture_sampler(VkDevice device, VkFilter min_filter, VkFilter mag_filter, VkSamplerAddressMode address_mode);
 
-void vulkan_cmd_bind_pipeline(VkCommandBuffer buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index);
+void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index, Array <VkDescriptorSet> const &descriptor_sets);

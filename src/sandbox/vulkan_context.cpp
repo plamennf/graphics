@@ -667,7 +667,7 @@ VkRenderPass Vulkan_Context::create_simple_render_pass() {
 
     VkAttachmentReference depth_attachment_reference = {};
     depth_attachment_reference.attachment = 1;
-    depth_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    depth_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     
     VkSubpassDescription subpass_description = {};
     subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -818,6 +818,7 @@ Vulkan_Buffer_And_Memory Vulkan_Context::create_buffer(VkDeviceSize size, VkBuff
     }
 
     result.is_valid = true;
+    result.size     = (u32)size;
 
     return result;
 }
@@ -1314,14 +1315,16 @@ void Vulkan_Queue::wait_idle() {
     vkQueueWaitIdle(queue);
 }
 
-bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs, Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size) {
+bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs) {
     this->device = device;
 
+    /*
     if (mesh) {
         if (!create_descriptor_sets(mesh, num_images, uniform_buffers, uniform_buffer_size)) {
             return false;
         }
     }
+    */
     
     VkPipelineShaderStageCreateInfo shader_stage_create_infos[2] = {};
 
@@ -1393,13 +1396,8 @@ bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, Vk
     VkPipelineLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-    if (mesh && mesh->vertex_buffer.buffer) {
-        layout_info.setLayoutCount = 1;
-        layout_info.pSetLayouts = &descriptor_set_layout;
-    } else {
-        layout_info.setLayoutCount = 0;
-        layout_info.pSetLayouts = NULL;
-    }
+    layout_info.setLayoutCount = 1;
+    layout_info.pSetLayouts = &descriptor_set_layout;
     
     CHECK_VK_RESULT(vkCreatePipelineLayout(device, &layout_info, NULL, &pipeline_layout), "Failed to create graphics pipeline layout");
     
@@ -1427,18 +1425,21 @@ bool Vulkan_Graphics_Pipeline::init(VkDevice device, Platform_Window *window, Vk
     return true;
 }
 
-bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images, Array <Vulkan_Buffer_And_Memory> &uniform_buffers, VkDeviceSize uniform_buffer_size) {
-    // Create descriptor pool(num_images)
-    VkDescriptorPoolSize pool_sizes[3] = {};
+bool Vulkan_Graphics_Pipeline::allocate_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images) {
+    // Create descriptor pool
+    VkDescriptorPoolSize pool_sizes[NUM_BINDINGS] = {};
     
-    pool_sizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    pool_sizes[0].descriptorCount = num_images;
+    pool_sizes[BINDING_VERTEX_BUFFER].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_sizes[BINDING_VERTEX_BUFFER].descriptorCount = num_images;
 
-    pool_sizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    pool_sizes[1].descriptorCount = num_images;
+    pool_sizes[BINDING_INDEX_BUFFER].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    pool_sizes[BINDING_INDEX_BUFFER].descriptorCount = num_images;
 
-    pool_sizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    pool_sizes[2].descriptorCount = num_images;
+    pool_sizes[BINDING_UNIFORM].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    pool_sizes[BINDING_UNIFORM].descriptorCount = num_images;
+
+    pool_sizes[BINDING_TEXTURE].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    pool_sizes[BINDING_TEXTURE].descriptorCount = num_images;
     
     VkDescriptorPoolCreateInfo pool_create_info = {};
     pool_create_info.sType   = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1453,21 +1454,28 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
     layout_bindings.use_temporary_storage = true;
     
     VkDescriptorSetLayoutBinding vertex_shader_layout_binding_vertex_buffer = {};
-    vertex_shader_layout_binding_vertex_buffer.binding = 0;
+    vertex_shader_layout_binding_vertex_buffer.binding = BINDING_VERTEX_BUFFER;
     vertex_shader_layout_binding_vertex_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     vertex_shader_layout_binding_vertex_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_vertex_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layout_bindings.add(vertex_shader_layout_binding_vertex_buffer);
 
+    VkDescriptorSetLayoutBinding vertex_shader_layout_binding_index_buffer = {};
+    vertex_shader_layout_binding_index_buffer.binding = BINDING_INDEX_BUFFER;
+    vertex_shader_layout_binding_index_buffer.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    vertex_shader_layout_binding_index_buffer.descriptorCount = 1;
+    vertex_shader_layout_binding_index_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    layout_bindings.add(vertex_shader_layout_binding_index_buffer);
+
     VkDescriptorSetLayoutBinding vertex_shader_layout_binding_uniform_buffer = {};
-    vertex_shader_layout_binding_uniform_buffer.binding = 1;
+    vertex_shader_layout_binding_uniform_buffer.binding = BINDING_UNIFORM;
     vertex_shader_layout_binding_uniform_buffer.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     vertex_shader_layout_binding_uniform_buffer.descriptorCount = 1;
     vertex_shader_layout_binding_uniform_buffer.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     layout_bindings.add(vertex_shader_layout_binding_uniform_buffer);
 
     VkDescriptorSetLayoutBinding fragment_shader_layout_binding = {};
-    fragment_shader_layout_binding.binding = 2;
+    fragment_shader_layout_binding.binding = BINDING_TEXTURE;
     fragment_shader_layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     fragment_shader_layout_binding.descriptorCount = 1;
     fragment_shader_layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1497,62 +1505,78 @@ bool Vulkan_Graphics_Pipeline::create_descriptor_sets(Mesh *mesh, int num_images
     descriptor_sets.resize(num_images);
     
     CHECK_VK_RESULT(vkAllocateDescriptorSets(device, &allocate_info, descriptor_sets.data), "Failed to allocate vulkan descriptor sets");
-    
-    // Update descriptor sets(mesh, num images)
+        
+    return true;
+}
+
+void Vulkan_Graphics_Pipeline::update_descriptor_sets(Vulkan_Buffer_And_Memory vertex_buffer, Vulkan_Buffer_And_Memory index_buffer, Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Vulkan_Texture texture, Array <VkDescriptorSet> &descriptor_sets) {
+    Array <VkWriteDescriptorSet> write_descriptor_set;
+    write_descriptor_set.use_temporary_storage = true;
+    write_descriptor_set.resize(descriptor_sets.count * NUM_BINDINGS);
+
     VkDescriptorBufferInfo buffer_info_vertex_buffer = {};
-    buffer_info_vertex_buffer.buffer = mesh->vertex_buffer.buffer;
-    buffer_info_vertex_buffer.offset = 0;
-    buffer_info_vertex_buffer.range  = mesh->vertex_buffer_size;
+    buffer_info_vertex_buffer.buffer = vertex_buffer.buffer;
+    buffer_info_vertex_buffer.range  = vertex_buffer.size;
+
+    VkDescriptorBufferInfo buffer_info_index_buffer = {};
+    buffer_info_index_buffer.buffer = index_buffer.buffer;
+    buffer_info_index_buffer.range  = index_buffer.size;
+
+    Array <VkDescriptorBufferInfo> buffer_info_uniforms;
+    buffer_info_uniforms.use_temporary_storage = true;
+    buffer_info_uniforms.resize(descriptor_sets.count);
+
+    for (int i = 0; i < descriptor_sets.count; i++) {
+        VkDescriptorBufferInfo info = {};
+        info.buffer = uniform_buffers[i].buffer;
+        info.range  = uniform_buffers[i].size;
+        buffer_info_uniforms[i] = info;
+    }
 
     VkDescriptorImageInfo image_info = {};
-    image_info.sampler = mesh->texture.sampler;
-    image_info.imageView = mesh->texture.view;
+    image_info.sampler     = texture.sampler;
+    image_info.imageView   = texture.view;
     image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    int wds_index = 0;
     
-    Array <VkWriteDescriptorSet> write_descriptor_sets;
-    write_descriptor_sets.use_temporary_storage = true;
-    
-    for (int i = 0; i < num_images; i++) {
-        VkWriteDescriptorSet descriptor_set = {};
-        descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptor_set.dstSet = descriptor_sets[i];
-        descriptor_set.dstBinding = 0;
-        descriptor_set.dstArrayElement = 0;
-        descriptor_set.descriptorCount = 1;
-        descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        descriptor_set.pBufferInfo = &buffer_info_vertex_buffer;
-        write_descriptor_sets.add(descriptor_set);
-        
-        VkDescriptorBufferInfo buffer_info_uniform = {};
-        buffer_info_uniform.buffer = uniform_buffers[i].buffer;
-        buffer_info_uniform.offset = 0;
-        buffer_info_uniform.range  = uniform_buffer_size;
+    for (int i = 0; i < descriptor_sets.count; i++) {
+        VkDescriptorSet dst_set = descriptor_sets[i];
 
-        VkWriteDescriptorSet uniform_descriptor_set = {};
-        uniform_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        uniform_descriptor_set.dstSet = descriptor_sets[i];
-        uniform_descriptor_set.dstBinding = 1;
-        uniform_descriptor_set.dstArrayElement = 0;
-        uniform_descriptor_set.descriptorCount = 1;
-        uniform_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uniform_descriptor_set.pBufferInfo = &buffer_info_uniform;
-        write_descriptor_sets.add(uniform_descriptor_set);
+        VkWriteDescriptorSet wds = {};
+        wds.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wds.dstSet = dst_set;
+        wds.dstBinding = BINDING_VERTEX_BUFFER;
+        wds.dstArrayElement = 0;
+        wds.descriptorCount = 1;
+        wds.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        wds.pBufferInfo = &buffer_info_vertex_buffer;
 
-        VkWriteDescriptorSet image_descriptor_set = {};
-        image_descriptor_set.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        image_descriptor_set.dstSet = descriptor_sets[i];
-        image_descriptor_set.dstBinding = 2;
-        image_descriptor_set.dstArrayElement = 0;
-        image_descriptor_set.descriptorCount = 1;
-        image_descriptor_set.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        image_descriptor_set.pImageInfo = &image_info;
-        write_descriptor_sets.add(image_descriptor_set);
+        Assert(wds_index < write_descriptor_set.count);
+        write_descriptor_set[wds_index++] = wds;
 
+        wds.dstBinding = BINDING_INDEX_BUFFER;
+        wds.pBufferInfo = &buffer_info_index_buffer;
+
+        Assert(wds_index < write_descriptor_set.count);
+        write_descriptor_set[wds_index++] = wds;
+
+        wds.dstBinding = BINDING_UNIFORM;
+        wds.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        wds.pBufferInfo = &buffer_info_uniforms[i];
+            
+        Assert(wds_index < write_descriptor_set.count);
+        write_descriptor_set[wds_index++] = wds;
+
+        wds.dstBinding = BINDING_TEXTURE;
+        wds.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        wds.pImageInfo = &image_info;
+
+        Assert(wds_index < write_descriptor_set.count);
+        write_descriptor_set[wds_index++] = wds;
     }
-    
-    vkUpdateDescriptorSets(device, (u32)write_descriptor_sets.count, write_descriptor_sets.data, 0, NULL);
-    
-    return true;
+
+    vkUpdateDescriptorSets(device, (u32)write_descriptor_set.count, write_descriptor_set.data, 0, NULL);;
 }
 
 bool Vulkan_Buffer_And_Memory::update(VkDevice device, void *data, u32 size) {
@@ -1598,13 +1622,13 @@ void Vulkan_Texture::destroy(VkDevice device) {
     }
 }
 
-void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index) {
+void vulkan_cmd_bind_pipeline(VkCommandBuffer command_buffer, Vulkan_Graphics_Pipeline *pipeline, int image_index, Array <VkDescriptorSet> const &descriptor_sets) {
     Assert(pipeline);
     
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->pipeline);
-    if (pipeline->descriptor_sets.count > 0) {
+    if (descriptor_sets.count > 0) {
         vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                 pipeline->pipeline_layout, 0, 1,
-                                &pipeline->descriptor_sets[image_index], 0, NULL);
+                                &descriptor_sets[image_index], 0, NULL);
     }
 }
