@@ -563,7 +563,7 @@ VkRenderPass Vulkan_Context::create_simple_render_pass() {
 
     VkAttachmentReference attachment_reference = {};
     attachment_reference.attachment = 0;
-    attachment_reference.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkSubpassDescription subpass_description = {};
     subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
