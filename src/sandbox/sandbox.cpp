@@ -21,6 +21,13 @@ struct Vertex {
 
 Global_Variables globals;
 
+static bool file_exists(const char *filepath) {
+    FILE *file = fopen(filepath, "rb");
+    if (!file) return false;
+    fclose(file);
+    return true;
+}
+
 int main(int argc, char *argv[]) {
     init_temporary_storage(Megabytes(1));
     
@@ -58,7 +65,7 @@ int main(int argc, char *argv[]) {
     };
 
     Mesh mesh = {};
-    if (!load_mesh_gltf(&mesh, "data/meshes/Demon.gltf")) return 1;
+    if (!load_mesh_gltf(&mesh, "data/meshes/Sponza.gltf")) return 1;
 
     Vulkan_Graphics_Pipeline pipeline(context.device, globals.window);
 
@@ -84,8 +91,27 @@ int main(int argc, char *argv[]) {
         if (!context.create_uniform_buffers(submesh->uniform_buffers, sizeof(Per_Object_Uniform_Data))) return 1;
 
         if (submesh->material.diffuse_texture_name) {
+            const char *extensions[] = {
+                "png",
+                "jpg",
+                "bmp",
+            };
+            
             char full_path[4096];
-            snprintf(full_path, sizeof(full_path), "data/textures/%s.png", submesh->material.diffuse_texture_name);
+            bool full_path_exists = false;
+            for (int i = 0; i < ArrayCount(extensions); i++) {
+                snprintf(full_path, sizeof(full_path), "data/textures/%s.%s", submesh->material.diffuse_texture_name, extensions[i]);
+                if (file_exists(full_path)) {
+                    full_path_exists = true;
+                    break;
+                }
+            }
+
+            if (!full_path_exists) {
+                logprintf("No file '%s' found in 'data/textures'!\n", submesh->material.diffuse_texture_name);
+                return 1;
+            }
+            
             submesh->texture = context.create_texture(full_path);
         } else {
             submesh->texture = context.create_texture("data/textures/white.png");
@@ -166,9 +192,14 @@ int main(int argc, char *argv[]) {
     }
 
     Camera camera;
-    init_camera(&camera, v3(0, 2, 0), 0, 0, 0);
+    init_camera(&camera, v3(0, GROUND_LEVEL, 0), 0, 0, 0);
 
     bool should_show_cursor = false;
+    if (should_show_cursor) {
+        platform_show_and_unlock_cursor();
+    } else {
+        platform_hide_and_lock_cursor(globals.window);
+    }
 
     float fixed_update_dt = 1.0f / 60.0f;
     u64 last_time = platform_get_time_in_nanoseconds();
@@ -199,6 +230,11 @@ int main(int argc, char *argv[]) {
 
         if (is_key_pressed(&globals.window->keyboard, KEY_ESCAPE)) {
             should_show_cursor = !should_show_cursor;
+            if (should_show_cursor) {
+                platform_show_and_unlock_cursor();
+            } else {
+                platform_hide_and_lock_cursor(globals.window);
+            }
         }
 
         if (should_show_cursor) {
@@ -206,11 +242,15 @@ int main(int argc, char *argv[]) {
         } else {
             platform_hide_and_lock_cursor(globals.window);
         }
-        
-        update_camera(&camera, CAMERA_TYPE_FPS, dt);
+
+        if (!should_show_cursor) {
+            update_camera(&camera, CAMERA_TYPE_FPS, dt);
+        }
 
         while (accumulated_dt >= fixed_update_dt) {
-            fixed_update_camera(&camera, CAMERA_TYPE_FPS, fixed_update_dt);
+            if (!should_show_cursor) {
+                fixed_update_camera(&camera, CAMERA_TYPE_FPS, fixed_update_dt);
+            }
             accumulated_dt -= fixed_update_dt;
         }
         
@@ -220,7 +260,7 @@ int main(int argc, char *argv[]) {
         Per_Scene_Uniform_Data per_scene_uniforms;
         per_scene_uniforms.projection_matrix = make_perspective((float)globals.window->width / (float)globals.window->height, 45.0f, 0.1f, 1000.0f);
         per_scene_uniforms.projection_matrix._22 *= -1.0f; // Flip the y because Vulkan is left-handed by default
-        per_scene_uniforms.view_matrix = matrix4_identity();//get_view_matrix(&camera);
+        per_scene_uniforms.view_matrix = get_view_matrix(&camera);
 
         per_scene_uniforms.projection_matrix = transpose(per_scene_uniforms.projection_matrix);
         per_scene_uniforms.view_matrix = transpose(per_scene_uniforms.view_matrix);

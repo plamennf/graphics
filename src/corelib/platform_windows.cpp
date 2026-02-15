@@ -18,6 +18,7 @@ static int num_created_windows;
 static bool window_class_initted;
 
 static LARGE_INTEGER global_perf_freq;
+static u64 nanoseconds_per_tick;
 
 static Platform_Window_Windows *add_window() {
     Assert(num_created_windows < MAX_PLATFORM_WINDOWS);
@@ -375,12 +376,13 @@ void platform_shutdown() {
 u64 platform_get_time_in_nanoseconds() {
     if (!global_perf_freq.QuadPart) {
         QueryPerformanceFrequency(&global_perf_freq);
+        nanoseconds_per_tick = 1000000000 / global_perf_freq.QuadPart;
     }
-
+    
     LARGE_INTEGER perf_counter;
     QueryPerformanceCounter(&perf_counter);
-
-    return (u64)((perf_counter.QuadPart + 1000000000ULL) / global_perf_freq.QuadPart);
+    
+    return perf_counter.QuadPart * nanoseconds_per_tick;
 }
 
 //
@@ -584,7 +586,7 @@ void platform_hide_and_lock_cursor(Platform_Window *_window) {
     Assert(_window);
     Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
 
-HWND hwnd = window->hwnd;
+    HWND hwnd = window->hwnd;
 
     // Hide cursor
     while (ShowCursor(FALSE) >= 0) {
@@ -609,10 +611,16 @@ HWND hwnd = window->hwnd;
     // Lock cursor to window client area
     ClipCursor(&rect);
 
+    POINT old_point;
+    GetCursorPos(&old_point);
+    
     // Optional: center cursor
     int center_x = (rect.left + rect.right) / 2;
     int center_y = (rect.top + rect.bottom) / 2;
     SetCursorPos(center_x, center_y);
+
+    window->mouse.cursor_x_delta = old_point.x - center_x;
+    window->mouse.cursor_y_delta = center_y - old_point.y;
 }
 
 #endif

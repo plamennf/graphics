@@ -27,9 +27,9 @@ void update_camera_fps(Camera *camera, float dt) {
 
     float old_y = camera->position.y;
 
-    float movement_speed = 5.0f;
+    float movement_speed = MOVEMENT_SPEED;
     if (is_key_down(&globals.window->keyboard, KEY_SHIFT)) {
-        movement_speed *= 3.0f;
+        movement_speed *= MOVEMENT_SPEED_SPRINT_MULTIPLIER;
     }
 
     Vector3 world_up = v3(0, 1, 0);
@@ -62,12 +62,6 @@ void update_camera_fps(Camera *camera, float dt) {
 
     camera->target.y = sinf(to_radians(camera->pitch));
     camera->target   = normalize_or_zero(camera->target);
-
-    if (camera->position.x < -99.0f) camera->position.x = -99.0f;
-    if (camera->position.x > +99.0f) camera->position.x = +99.0f;
-
-    if (camera->position.z < -94.0f) camera->position.z = -94.0f;
-    if (camera->position.z > +99.0f) camera->position.z = +99.0f;
 }
 
 void fixed_update_camera_fps(Camera *camera, float dt) {
@@ -84,8 +78,8 @@ void fixed_update_camera_fps(Camera *camera, float dt) {
 
     camera->position.y += camera->jump_velocity;
     
-    if (camera->position.y < 2.0f) {
-        camera->position.y = 2.0f;
+    if (camera->position.y < GROUND_LEVEL) {
+        camera->position.y = GROUND_LEVEL;
         camera->is_on_ground = true;
     }
 }
@@ -96,7 +90,7 @@ void update_camera_noclip(Camera *camera, float dt) {
     
     camera->yaw   += globals.window->mouse.cursor_x_delta * sensitivity;
     camera->pitch += globals.window->mouse.cursor_y_delta * sensitivity;
-
+    
     if (camera->pitch > 89.0f) {
         camera->pitch = 89.0f;
     } else if (camera->pitch < -89.0f) {

@@ -186,7 +186,8 @@ inline Matrix4 make_perspective(float aspect_ratio, float fov_in_degrees, float 
     Matrix4 m = {};
     m._11 = x_scale;
     m._22 = y_scale;
-    m._33 = -((z_far + z_near) / frustum_length);
+    //m._33 = -((z_far + z_near) / frustum_length);
+    m._33 = z_far / (z_near - z_far);
     m._43 = -1.0f;
     m._34 = -((2 * z_near * z_far) / frustum_length);
     m._44 = 0.0f;
