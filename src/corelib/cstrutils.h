@@ -2,6 +2,7 @@
 
 int string_length(const char *s);
 char *copy_string(const char *s);
+bool strings_match(const char *a, const char *b);
 
 bool is_end_of_line(char c);
 bool is_space(char c);

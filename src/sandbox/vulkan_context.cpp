@@ -218,7 +218,23 @@ bool Vulkan_Context::init(Platform_Window *window) {
     return true;
 }
 
+bool Vulkan_Context::get_instance_version() {
+    u32 instance_version_packed = 0;
+
+    CHECK_VK_RESULT(vkEnumerateInstanceVersion(&instance_version_packed), "Failed to enumerate the vulkan instance version");
+
+    instance_version.major = VK_API_VERSION_MAJOR(instance_version_packed);
+    instance_version.minor = VK_API_VERSION_MINOR(instance_version_packed);
+    instance_version.patch = VK_API_VERSION_PATCH(instance_version_packed);
+
+    logprintf("Vulkan loader supports version %d.%d.%d\n", instance_version.major, instance_version.minor, instance_version.patch);
+
+    return true;
+}
+
 bool Vulkan_Context::create_instance() {
+    if (!get_instance_version()) return false;
+    
     Array <const char *> validation_layers;
     validation_layers.use_temporary_storage = true;
     validation_layers.add("VK_LAYER_KHRONOS_validation");
@@ -237,7 +253,7 @@ bool Vulkan_Context::create_instance() {
     app_info.applicationVersion = VK_MAKE_API_VERSION(0, 1, 0, 0);
     app_info.pEngineName        = "No Engine";
     app_info.engineVersion      = VK_MAKE_API_VERSION(0, 1, 0, 0);
-    app_info.apiVersion         = VK_API_VERSION_1_0;
+    app_info.apiVersion         = VK_MAKE_API_VERSION(0, instance_version.major, instance_version.minor, 0);
 
     VkInstanceCreateInfo create_info    = {};
     create_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -309,6 +325,23 @@ bool Vulkan_Context::create_device() {
     device_extensions.add(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     device_extensions.add(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
 
+    bool device_supports_dynamic_rendering = selected_physical_device->is_extension_supported(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    bool instance_is_1_3_or_more = instance_version.major > 1 || instance_version.minor >= 3;
+
+    if (device_supports_dynamic_rendering && instance_is_1_3_or_more) {
+        logprintf("The vulkan instance and device support dynamic rendering as a core feature!\n");
+    } else if (instance_version.minor == 2) {
+        if (device_supports_dynamic_rendering) {
+            device_extensions.add(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        } else {
+            logprintf("The system doesn't support dynamic rendering!\n");
+            return false;
+        }
+    } else {
+        logprintf("The system doesn't support dynamic rendering!\n");
+        return false;
+    }
+    
     if (selected_physical_device->features.geometryShader == VK_FALSE) {
         logprintf("The geometry shader is not supported!\n");
         return false;
@@ -323,8 +356,13 @@ bool Vulkan_Context::create_device() {
     device_features.geometryShader     = VK_TRUE;
     device_features.tessellationShader = VK_TRUE;
 
+    VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {};
+    dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+    dynamic_rendering_features.dynamicRendering = VK_TRUE;
+    
     VkDeviceCreateInfo device_create_info = {};
     device_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    device_create_info.pNext                   = &dynamic_rendering_features;
     device_create_info.queueCreateInfoCount    = 1;
     device_create_info.pQueueCreateInfos       = &queue_create_info;
     device_create_info.enabledExtensionCount   = device_extensions.count;
@@ -363,14 +401,9 @@ bool Vulkan_Physical_Devices::init(VkInstance instance, VkSurfaceKHR surface) {
 
         logprintf("  %s:\n", device->properties.deviceName);
 
-        u32 api_version = device->properties.apiVersion;
-
-        logprintf("    API Version: %d.%d.%d.%d\n",
-                  VK_API_VERSION_VARIANT(api_version),
-                  VK_API_VERSION_MAJOR(api_version),
-                  VK_API_VERSION_MINOR(api_version),
-                  VK_API_VERSION_PATCH(api_version));
-
+        get_device_api_version(i);
+        get_extensions(i);
+        
         u32 num_queue_families;
         vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &num_queue_families, NULL);
         logprintf("    Num of queue families: %d\n", num_queue_families);
@@ -472,6 +505,52 @@ Vulkan_Physical_Device *Vulkan_Physical_Devices::get_selected() {
     }
 
     return &devices[device_index];
+}
+
+void Vulkan_Physical_Devices::get_extensions(int index) {
+    Vulkan_Physical_Device *device = &devices[index];
+    Assert(device);
+    
+    u32 num_extensions;
+    vkEnumerateDeviceExtensionProperties(device->device, NULL, &num_extensions, NULL);
+    Assert(num_extensions > 0);
+
+    device->extensions.resize(num_extensions);
+
+    vkEnumerateDeviceExtensionProperties(device->device, NULL, &num_extensions, device->extensions.data);
+
+    logprintf("    Physical device extensions:\n");
+    for (VkExtensionProperties const &extension : device->extensions) {
+        logprintf("      %s\n", extension.extensionName);
+    }
+}
+
+void Vulkan_Physical_Devices::get_device_api_version(int index) {
+    Vulkan_Physical_Device *device = &devices[index];
+    Assert(device);
+    
+    u32 api_version = device->properties.apiVersion;
+
+    device->api_version.variant = VK_API_VERSION_VARIANT(api_version);
+    device->api_version.major   = VK_API_VERSION_MAJOR(api_version);
+    device->api_version.minor   = VK_API_VERSION_MINOR(api_version);
+    device->api_version.patch   = VK_API_VERSION_PATCH(api_version);
+    
+    logprintf("    API Version: %d.%d.%d.%d\n",
+              VK_API_VERSION_VARIANT(api_version),
+              VK_API_VERSION_MAJOR(api_version),
+              VK_API_VERSION_MINOR(api_version),
+              VK_API_VERSION_PATCH(api_version));
+}
+
+bool Vulkan_Physical_Device::is_extension_supported(const char *extension) const {
+    for (VkExtensionProperties const &e : extensions) {
+        if (strings_match(e.extensionName, extension)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static VkPresentModeKHR choose_present_mode(Array <VkPresentModeKHR> const &present_modes) {
@@ -637,92 +716,6 @@ bool Vulkan_Context::create_command_buffers(int num_command_buffers, VkCommandBu
 
     logprintf("%d vulkan command buffers allocated!\n", num_command_buffers);
 
-    return true;
-}
-
-VkRenderPass Vulkan_Context::create_simple_render_pass() {
-    VkAttachmentDescription color_attachment_description = {};
-    color_attachment_description.format = swap_chain_surface_format.format;
-    color_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
-    color_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    color_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    color_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    color_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    color_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    color_attachment_description.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference color_attachment_reference = {};
-    color_attachment_reference.attachment = 0;
-    color_attachment_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    
-    VkAttachmentDescription depth_attachment_description = {};
-    depth_attachment_description.format = selected_physical_device->depth_format;
-    depth_attachment_description.samples = VK_SAMPLE_COUNT_1_BIT;
-    depth_attachment_description.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depth_attachment_description.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depth_attachment_description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depth_attachment_description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depth_attachment_description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depth_attachment_description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depth_attachment_reference = {};
-    depth_attachment_reference.attachment = 1;
-    depth_attachment_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;//VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    
-    VkSubpassDescription subpass_description = {};
-    subpass_description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass_description.inputAttachmentCount = 0;
-    subpass_description.pInputAttachments = NULL;
-    subpass_description.colorAttachmentCount = 1;
-    subpass_description.pColorAttachments = &color_attachment_reference;
-    subpass_description.pDepthStencilAttachment = &depth_attachment_reference;
-
-    VkAttachmentDescription attachment_descriptions[] = {
-        color_attachment_description,
-        depth_attachment_description,
-    };
-    
-    VkRenderPassCreateInfo render_pass_create_info = {};
-    render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_create_info.attachmentCount = ArrayCount(attachment_descriptions);
-    render_pass_create_info.pAttachments = attachment_descriptions;
-    render_pass_create_info.subpassCount = 1;
-    render_pass_create_info.pSubpasses = &subpass_description;
-
-    VkRenderPass render_pass;
-    if (vkCreateRenderPass(device, &render_pass_create_info, NULL, &render_pass) != VK_SUCCESS) {
-        logprintf("Failed to create simple render pass\n");
-        return NULL;
-    }
-
-    logprintf("Vulkan render pass created!\n");
-    
-    return render_pass;
-}
-
-bool Vulkan_Context::create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window) {
-    framebuffers.resize(images.count);
-
-    for (int i = 0; i < framebuffers.count; i++) {
-        VkImageView attachments[] = {
-            image_views[i],
-            depth_images[i].view
-        };
-        
-        VkFramebufferCreateInfo create_info = {};
-        create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        create_info.renderPass = render_pass;
-        create_info.attachmentCount = ArrayCount(attachments);
-        create_info.pAttachments = attachments;
-        create_info.width = window->width;
-        create_info.height = window->height;
-        create_info.layers = 1;
-        
-        CHECK_VK_RESULT(vkCreateFramebuffer(device, &create_info, NULL, &framebuffers[i]), "Failed to create vulkan framebuffer");
-    }
-
-    logprintf("Vulkan framebuffers created!\n");
-    
     return true;
 }
 
@@ -1315,16 +1308,8 @@ void Vulkan_Queue::wait_idle() {
     vkQueueWaitIdle(queue);
 }
 
-bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs) {
+bool Vulkan_Graphics_Pipeline::init(VkShaderModule vs, VkShaderModule fs, VkFormat color_format, VkFormat depth_format) {
     this->device = device;
-
-    /*
-    if (mesh) {
-        if (!create_descriptor_sets(mesh, num_images, uniform_buffers, uniform_buffer_size)) {
-            return false;
-        }
-    }
-    */
     
     VkPipelineShaderStageCreateInfo shader_stage_create_infos[2] = {};
 
@@ -1393,6 +1378,13 @@ bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs,
     blend_create_info.attachmentCount = 1;
     blend_create_info.pAttachments = &blend_attachment_state;
 
+    VkPipelineRenderingCreateInfo rendering_info = {};
+    rendering_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    rendering_info.colorAttachmentCount = 1;
+    rendering_info.pColorAttachmentFormats = &color_format;
+    rendering_info.depthAttachmentFormat = depth_format;
+    rendering_info.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+    
     VkPipelineLayoutCreateInfo layout_info = {};
     layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
@@ -1408,6 +1400,7 @@ bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs,
     
     VkGraphicsPipelineCreateInfo pipeline_info = {};
     pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline_info.pNext = &rendering_info;
     pipeline_info.stageCount = ArrayCount(shader_stage_create_infos);
     pipeline_info.pStages = shader_stage_create_infos;
     pipeline_info.pVertexInputState = &vertex_input_info;
@@ -1418,7 +1411,7 @@ bool Vulkan_Graphics_Pipeline::init(VkRenderPass render_pass, VkShaderModule vs,
     pipeline_info.pDepthStencilState = &depth_stencil_state;
     pipeline_info.pColorBlendState = &blend_create_info;
     pipeline_info.layout = pipeline_layout;
-    pipeline_info.renderPass = render_pass;
+    pipeline_info.renderPass = VK_NULL_HANDLE;
     pipeline_info.subpass = 0;
     pipeline_info.basePipelineHandle = VK_NULL_HANDLE;
     pipeline_info.basePipelineIndex = -1;

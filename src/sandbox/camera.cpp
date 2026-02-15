@@ -14,7 +14,7 @@ void init_camera(Camera *camera, Vector3 position, float pitch, float yaw, float
 }
 
 void update_camera_fps(Camera *camera, float dt) {
-    float sensitivity = 1.0f;//globals.mouse_sensitivity;
+    float sensitivity = globals.mouse_sensitivity;
     
     camera->yaw   += globals.window->mouse.cursor_x_delta * sensitivity;
     camera->pitch += globals.window->mouse.cursor_y_delta * sensitivity;
@@ -80,7 +80,7 @@ void fixed_update_camera_fps(Camera *camera, float dt) {
         }
     }
 
-    camera->jump_velocity -= 1.0f * dt;
+    camera->jump_velocity -= 3.0f * dt;
 
     camera->position.y += camera->jump_velocity;
     
@@ -91,7 +91,7 @@ void fixed_update_camera_fps(Camera *camera, float dt) {
 }
 
 void update_camera_noclip(Camera *camera, float dt) {
-    float sensitivity = 1.0f;//globals.mouse_sensitivity;
+    float sensitivity = globals.mouse_sensitivity;
     //float dt = globals.time_info.dt;
     
     camera->yaw   += globals.window->mouse.cursor_x_delta * sensitivity;

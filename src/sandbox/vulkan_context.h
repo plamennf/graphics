@@ -26,6 +26,15 @@ struct Vulkan_Physical_Device {
     Array <VkPresentModeKHR> present_modes;
     VkPhysicalDeviceFeatures features;
     VkFormat depth_format;
+    struct {
+        int variant;
+        int major;
+        int minor;
+        int patch;
+    } api_version;
+    Array <VkExtensionProperties> extensions;
+
+    bool is_extension_supported(const char *extension) const;
 };
 
 struct Vulkan_Physical_Devices {
@@ -35,6 +44,10 @@ struct Vulkan_Physical_Devices {
     bool init(VkInstance instance, VkSurfaceKHR surface);
     u32 select_device(VkQueueFlags required_queue_type, bool supports_present);
     Vulkan_Physical_Device *get_selected();
+
+private:
+    void get_extensions(int index);
+    void get_device_api_version(int index);
 };
 
 struct Vulkan_Queue {
@@ -86,7 +99,7 @@ struct Vulkan_Graphics_Pipeline {
     
     Vulkan_Graphics_Pipeline(VkDevice device, Platform_Window *window) : window(window), device(device) {}
     
-    bool init(VkRenderPass render_pass, VkShaderModule vs, VkShaderModule fs);
+    bool init(VkShaderModule vs, VkShaderModule fs, VkFormat color_format, VkFormat depth_format);
 
     // @TODO: Collapse these in a more generic function.
     bool allocate_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images);
@@ -112,26 +125,35 @@ struct Vulkan_Context {
     VkCommandPool command_buffer_pool;
     Vulkan_Queue command_queue;
     VkCommandBuffer copy_command_buffer;
-    
+
+    struct {
+        int major;
+        int minor;
+        int patch;
+    } instance_version;
+        
     bool init(Platform_Window *window);
 
     bool create_command_buffers(int num_command_buffers, VkCommandBuffer *command_buffers);
-    VkRenderPass create_simple_render_pass();
-    bool create_framebuffers(Array <VkFramebuffer> &framebuffers, VkRenderPass render_pass, Platform_Window *window);
     Vulkan_Buffer_And_Memory create_vertex_buffer(void *data, u32 size);
     bool create_uniform_buffers(Array <Vulkan_Buffer_And_Memory> &buffers, u32 size);
 
     Vulkan_Texture create_texture(String filepath);
     Vulkan_Texture create_texture_image_from_data(void *data, int width, int height, VkFormat format);
+
+    inline VkFormat get_swap_chain_format() const { return swap_chain_surface_format.format; }
+    inline VkFormat get_depth_format() const { Assert(selected_physical_device); return selected_physical_device->depth_format; }
     
 private:
+    bool get_instance_version();
+    
     bool create_instance();
     bool create_debug_callback();
     bool create_surface(Platform_Window *window);
     bool create_device();
     bool create_swap_chain();
     bool create_command_buffer_pool();
-
+    
     bool create_depth_resources(Platform_Window *window);
     
     Vulkan_Buffer_And_Memory create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);

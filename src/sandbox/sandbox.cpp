@@ -41,12 +41,6 @@ int main(int argc, char *argv[]) {
     if (!context.create_command_buffers(num_images, command_buffers.data)) return 1;
     Vulkan_Queue *command_queue = &context.command_queue;
 
-    VkRenderPass render_pass = context.create_simple_render_pass();
-    if (!render_pass) return 1;
-    
-    Array <VkFramebuffer> framebuffers;
-    if (!context.create_framebuffers(framebuffers, render_pass, globals.window)) return 1;
-
     VkShaderModule vs = vulkan_create_shader_module_from_binary(context.device, "data/shaders/compiled/test.vert.spv");
     VkShaderModule fs = vulkan_create_shader_module_from_binary(context.device, "data/shaders/compiled/test.frag.spv");
     
@@ -101,40 +95,66 @@ int main(int argc, char *argv[]) {
         pipeline.update_descriptor_sets(submesh->vertex_buffer, submesh->index_buffer, submesh->uniform_buffers, submesh->texture, submesh->descriptor_sets);
     }
     
-    if (!pipeline.init(render_pass, vs, fs)) return 1;
+    if (!pipeline.init(vs, fs, context.get_swap_chain_format(), context.get_depth_format())) return 1;
     
     // Record command buffers
     {
-        VkClearValue clear_values[2];
-        clear_values[0].color = { 0.2f, 0.5f, 0.8f, 1.0f };
-        clear_values[1].depthStencil = { 1.0f, 0 };
-
-        VkRenderPassBeginInfo render_pass_begin_info = {};
-        render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        render_pass_begin_info.renderPass = render_pass;
-        render_pass_begin_info.renderArea.offset.x = 0;
-        render_pass_begin_info.renderArea.offset.y = 0;
-        render_pass_begin_info.renderArea.extent.width  = globals.window->width;
-        render_pass_begin_info.renderArea.extent.height = globals.window->height;
-        render_pass_begin_info.clearValueCount = ArrayCount(clear_values);
-        render_pass_begin_info.pClearValues = clear_values;
-
         for (int i = 0; i < command_buffers.count; i++) {            
             if (!vulkan_begin_command_buffer(command_buffers[i], VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT)) {
                 return 1;
             }
 
-            render_pass_begin_info.framebuffer = framebuffers[i];
+            vulkan_image_memory_barrier(command_buffers[i], context.images[i], context.get_swap_chain_format(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-            vkCmdBeginRenderPass(command_buffers[i], &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+            VkClearValue clear_color = {};
+            clear_color.color = { 0.2f, 0.5f, 0.8f, 1.0f };
 
+            VkClearValue depth_value = {};
+            depth_value.depthStencil.depth = 1.0f;
+            depth_value.depthStencil.stencil = 0;
+
+            VkRenderingAttachmentInfoKHR color_attachment = {};
+            color_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR;
+            color_attachment.imageView = context.image_views[i];
+            color_attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            color_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+            color_attachment.resolveImageView = VK_NULL_HANDLE;
+            color_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            color_attachment.clearValue = clear_color;
+
+            VkRenderingAttachmentInfo depth_attachment = {};
+            depth_attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depth_attachment.imageView = context.depth_images[i].view;
+            depth_attachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            depth_attachment.resolveMode = VK_RESOLVE_MODE_NONE;
+            depth_attachment.resolveImageView = VK_NULL_HANDLE;
+            depth_attachment.resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            depth_attachment.clearValue = depth_value;
+
+            VkRenderingInfoKHR rendering_info = {};
+            rendering_info.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR;
+            rendering_info.renderArea.extent.width  = globals.window->width;
+            rendering_info.renderArea.extent.height = globals.window->height;
+            rendering_info.layerCount = 1;
+            rendering_info.colorAttachmentCount = 1;
+            rendering_info.pColorAttachments = &color_attachment;
+            rendering_info.pDepthAttachment = &depth_attachment;
+
+            vkCmdBeginRendering(command_buffers[i], &rendering_info);
+            
             for (int j = 0; j < mesh.num_submeshes; j++) {
                 Submesh *submesh = &mesh.submeshes[j];
                 vulkan_cmd_bind_pipeline(command_buffers[i], &pipeline, i, per_scene_descriptor_sets, submesh->descriptor_sets);
                 vkCmdDraw(command_buffers[i], submesh->num_indices, 1, 0, 0);
             }
             
-            vkCmdEndRenderPass(command_buffers[i]);
+            vkCmdEndRendering(command_buffers[i]);
+
+            vulkan_image_memory_barrier(command_buffers[i], context.images[i], context.get_swap_chain_format(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
             
             if (vkEndCommandBuffer(command_buffers[i]) != VK_SUCCESS) {
                 logprintf("Failed to end %d command buffer\n", i);
@@ -148,14 +168,11 @@ int main(int argc, char *argv[]) {
     Camera camera;
     init_camera(&camera, v3(0, 2, 0), 0, 0, 0);
 
-    bool should_show_cursor = true;
-    if (should_show_cursor) {
-        platform_show_and_unlock_cursor();
-    } else {
-        platform_hide_and_lock_cursor(globals.window);
-    }
-    
+    bool should_show_cursor = false;
+
+    float fixed_update_dt = 1.0f / 60.0f;
     u64 last_time = platform_get_time_in_nanoseconds();
+    float accumulated_dt = 0.0f;
     while (globals.window->is_open) {
         reset_temporary_storage();
 
@@ -164,6 +181,7 @@ int main(int argc, char *argv[]) {
         last_time = now_time;
 
         float dt = (float)((double)dt_ns / 1000000000.0);
+        accumulated_dt += dt;
         
         platform_poll_events();
 
@@ -181,15 +199,20 @@ int main(int argc, char *argv[]) {
 
         if (is_key_pressed(&globals.window->keyboard, KEY_ESCAPE)) {
             should_show_cursor = !should_show_cursor;
-            if (should_show_cursor) {
-                platform_show_and_unlock_cursor();
-            } else {
-                platform_hide_and_lock_cursor(globals.window);
-            }
+        }
+
+        if (should_show_cursor) {
+            platform_show_and_unlock_cursor();
+        } else {
+            platform_hide_and_lock_cursor(globals.window);
         }
         
-        update_camera(&camera, CAMERA_TYPE_NOCLIP, dt);
-        fixed_update_camera(&camera, CAMERA_TYPE_NOCLIP, dt);
+        update_camera(&camera, CAMERA_TYPE_FPS, dt);
+
+        while (accumulated_dt >= fixed_update_dt) {
+            fixed_update_camera(&camera, CAMERA_TYPE_FPS, fixed_update_dt);
+            accumulated_dt -= fixed_update_dt;
+        }
         
         int image_index = command_queue->acquire_next_image();
         if (image_index == -1) return 1;
@@ -197,7 +220,7 @@ int main(int argc, char *argv[]) {
         Per_Scene_Uniform_Data per_scene_uniforms;
         per_scene_uniforms.projection_matrix = make_perspective((float)globals.window->width / (float)globals.window->height, 45.0f, 0.1f, 1000.0f);
         per_scene_uniforms.projection_matrix._22 *= -1.0f; // Flip the y because Vulkan is left-handed by default
-        per_scene_uniforms.view_matrix = matrix4_identity();
+        per_scene_uniforms.view_matrix = matrix4_identity();//get_view_matrix(&camera);
 
         per_scene_uniforms.projection_matrix = transpose(per_scene_uniforms.projection_matrix);
         per_scene_uniforms.view_matrix = transpose(per_scene_uniforms.view_matrix);

@@ -19,6 +19,22 @@ char *copy_string(const char *s) {
     return result;
 }
 
+bool strings_match(const char *a, const char *b) {
+    if (a == b) return true;
+    if (!a || !b) return false;
+
+    while (*a && *b) {
+        if (*a != *b) {
+            return false;
+        }
+
+        a++;
+        b++;
+    }
+
+    return *a == 0 && *b == 0;
+}
+
 bool is_end_of_line(char c) {
     bool result = ((c == '\n') ||
                    (c == '\v'));
