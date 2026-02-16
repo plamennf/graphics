@@ -104,6 +104,9 @@ int main(int argc, char *argv[]) {
         platform_hide_and_lock_cursor(globals.window);
     }
 
+    int previous_window_width  = globals.window->width;
+    int previous_window_height = globals.window->height;
+
     float fixed_update_dt = 1.0f / 60.0f;
     u64 last_time = platform_get_time_in_nanoseconds();
     float accumulated_dt = 0.0f;
@@ -118,6 +121,15 @@ int main(int argc, char *argv[]) {
         accumulated_dt += dt;
         
         platform_poll_events();
+
+        if (globals.window->width  != previous_window_width ||
+            globals.window->height != previous_window_height) {
+            if (globals.window->width != 0 && globals.window->height != 0) {
+                context.update_swap_chain = true;
+                previous_window_width  = globals.window->width;
+                previous_window_height = globals.window->height;
+            }
+        }
 
         if (is_key_down(&globals.window->keyboard, KEY_ALT)) {
             if (is_key_pressed(&globals.window->keyboard, KEY_F4)) {
@@ -157,8 +169,13 @@ int main(int argc, char *argv[]) {
             accumulated_dt -= fixed_update_dt;
         }
 
-        if (!context.begin_frame()) {
-            return 1;
+        int should_render = context.begin_frame();
+        if (should_render == -1) return false;
+        if (should_render == 0) {
+            if (!context.end_frame(VK_NULL_HANDLE, globals.window)) {
+                return 1;
+            }
+            continue;
         }
 
         VkCommandBuffer cb = command_buffers[context.frame_index];
@@ -313,7 +330,7 @@ int main(int argc, char *argv[]) {
 
         vkEndCommandBuffer(cb);
         
-        if (!context.end_frame(cb)) {
+        if (!context.end_frame(cb, globals.window)) {
             return 1;
         }
     }

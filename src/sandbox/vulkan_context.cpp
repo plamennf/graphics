@@ -211,7 +211,7 @@ bool Vulkan_Context::init(Platform_Window *window) {
     if (!selected_physical_device) return false;
     if (!create_device()) return false;
     if (!init_vma()) return false;
-    if (!create_swap_chain()) return false;
+    if (!create_swap_chain(window)) return false;
     if (!create_command_buffer_pool()) return false;
     //if (!command_queue.init(device, swap_chain, queue_family, 0)) return false;
     if (!create_command_buffers(1, &copy_command_buffer)) return false;
@@ -221,44 +221,68 @@ bool Vulkan_Context::init(Platform_Window *window) {
     return true;
 }
 
-bool Vulkan_Context::begin_frame() {
-    CHECK_VK_RESULT(vkWaitForFences(device, 1, &fences[frame_index], true, UINT64_MAX), "Faileld to wait for fence");
-    CHECK_VK_RESULT(vkResetFences(device, 1, &fences[frame_index]), "Failed to reset fence");
-
-    if (vkAcquireNextImageKHR(device, swap_chain, UINT64_MAX, present_complete_semaphores[frame_index], VK_NULL_HANDLE, (u32 *)&image_index) != VK_SUCCESS) {
-        // TODO: Recreate swap chain
+int Vulkan_Context::begin_frame() {
+    if (update_swap_chain) return 0;
+    
+    if (vkWaitForFences(device, 1, &fences[frame_index], true, UINT64_MAX) != VK_SUCCESS) {
+        logprintf("Failed to wait for fence!\n");
+        return -1;
+    }
+    if (vkResetFences(device, 1, &fences[frame_index]) != VK_SUCCESS) {
+        logprintf("Failed to reset fence!\n");
+        return -1;
     }
 
-    return true;
+    if (vkAcquireNextImageKHR(device, swap_chain, UINT64_MAX, present_complete_semaphores[frame_index], VK_NULL_HANDLE, (u32 *)&image_index) != VK_SUCCESS) {
+        update_swap_chain = true;
+        return 0;
+    }
+
+    return 1;
 }
 
-bool Vulkan_Context::end_frame(VkCommandBuffer cb) {
-    VkPipelineStageFlags wait_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+bool Vulkan_Context::end_frame(VkCommandBuffer cb, Platform_Window *window) {
+    if (!update_swap_chain) {
+        VkPipelineStageFlags wait_stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-    VkSubmitInfo submit_info = {};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = &present_complete_semaphores[frame_index];
-    submit_info.pWaitDstStageMask = &wait_stages;
-    submit_info.commandBufferCount = 1;
-    submit_info.pCommandBuffers = &cb;
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = &render_complete_semaphores[image_index];
+        VkSubmitInfo submit_info = {};
+        submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit_info.waitSemaphoreCount = 1;
+        submit_info.pWaitSemaphores = &present_complete_semaphores[frame_index];
+        submit_info.pWaitDstStageMask = &wait_stages;
+        submit_info.commandBufferCount = 1;
+        submit_info.pCommandBuffers = &cb;
+        submit_info.signalSemaphoreCount = 1;
+        submit_info.pSignalSemaphores = &render_complete_semaphores[image_index];
 
-    CHECK_VK_RESULT(vkQueueSubmit(graphics_and_present_queue, 1, &submit_info, fences[frame_index]), "Failed to submit to graphics and present queue");
+        CHECK_VK_RESULT(vkQueueSubmit(graphics_and_present_queue, 1, &submit_info, fences[frame_index]), "Failed to submit to graphics and present queue");
 
-    frame_index = (frame_index + 1) & NUM_FRAMES_IN_FLIGHT;
+        frame_index = (frame_index + 1) & NUM_FRAMES_IN_FLIGHT;
 
-    VkPresentInfoKHR present_info = {};
-    present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    present_info.waitSemaphoreCount = 1;
-    present_info.pWaitSemaphores = &render_complete_semaphores[image_index];
-    present_info.swapchainCount = 1;
-    present_info.pSwapchains = &swap_chain;
-    present_info.pImageIndices = (u32 *)&image_index;
+        VkPresentInfoKHR present_info = {};
+        present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        present_info.waitSemaphoreCount = 1;
+        present_info.pWaitSemaphores = &render_complete_semaphores[image_index];
+        present_info.swapchainCount = 1;
+        present_info.pSwapchains = &swap_chain;
+        present_info.pImageIndices = (u32 *)&image_index;
 
-    if (vkQueuePresentKHR(graphics_and_present_queue, &present_info) != VK_SUCCESS) {
-        // TODO: Recreate the swap chain
+        if (vkQueuePresentKHR(graphics_and_present_queue, &present_info) != VK_SUCCESS) {
+            update_swap_chain = true;
+        }
+    }
+    
+    if (update_swap_chain) {
+        if (!create_swap_chain(window)) return false;
+        
+        for (int i = 0; i < depth_images.count; i++) {
+            vmaDestroyImage(allocator, depth_images[i].image, depth_images[i].allocation);
+            vkDestroyImageView(device, depth_images[i].view, NULL);
+        }
+
+        if (!create_depth_resources(window)) return false;
+
+        update_swap_chain = false;
     }
 
     return true;
@@ -610,7 +634,12 @@ static VkImageView create_image_view(VkDevice device, VkImage image, VkFormat fo
     return result;
 }
 
-bool Vulkan_Context::create_swap_chain() {
+bool Vulkan_Context::create_swap_chain(Platform_Window *window) {
+    if (update_swap_chain) {
+        vkQueueWaitIdle(graphics_and_present_queue);
+        vkDeviceWaitIdle(device);
+    }
+    
     VkSurfaceCapabilitiesKHR surface_capabilities = selected_physical_device->surface_capabilities;
 
     u32 num_images = choose_num_images(surface_capabilities);
@@ -627,7 +656,7 @@ bool Vulkan_Context::create_swap_chain() {
     swap_chain_create_info.minImageCount    = num_images;
     swap_chain_create_info.imageFormat      = surface_format.format;
     swap_chain_create_info.imageColorSpace  = surface_format.colorSpace;
-    swap_chain_create_info.imageExtent      = surface_capabilities.currentExtent;
+    swap_chain_create_info.imageExtent      = { (u32)window->width, (u32)window->height };
     swap_chain_create_info.imageArrayLayers = 1;
     swap_chain_create_info.imageUsage       = (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                                                VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -638,11 +667,18 @@ bool Vulkan_Context::create_swap_chain() {
     swap_chain_create_info.compositeAlpha        = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swap_chain_create_info.presentMode           = present_mode;
     swap_chain_create_info.clipped               = VK_TRUE;
+    swap_chain_create_info.oldSwapchain          = swap_chain;
 
     CHECK_VK_RESULT(vkCreateSwapchainKHR(device, &swap_chain_create_info, NULL, &swap_chain), "Failed to create the swap chain");
 
     logprintf("Vulkan swap chain created!\n");
 
+    if (update_swap_chain) {
+        for (int i = 0; i < image_views.count; i++) {
+            vkDestroyImageView(device, image_views[i], NULL);
+        }
+    }
+    
     u32 num_swap_chain_images = 0;
     CHECK_VK_RESULT(vkGetSwapchainImagesKHR(device, swap_chain, &num_swap_chain_images, NULL), "Failed to get number of swap chain images");
     Assert(num_images == num_swap_chain_images);
@@ -661,6 +697,10 @@ bool Vulkan_Context::create_swap_chain() {
                                            VK_IMAGE_ASPECT_COLOR_BIT,
                                            VK_IMAGE_VIEW_TYPE_2D,
                                            num_layers, mip_levels);
+    }
+
+    if (update_swap_chain) {
+        vkDestroySwapchainKHR(device, swap_chain_create_info.oldSwapchain, NULL);
     }
 
     return true;

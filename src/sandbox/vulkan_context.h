@@ -110,13 +110,15 @@ struct Vulkan_Context {
 
     int frame_index = 0; // Used for resources that in flight
     int image_index = 0; // Used for resources that depend on the swap chain buffers
+
+    bool update_swap_chain = false;
     
     VkCommandBuffer copy_command_buffer;
 
     bool init(Platform_Window *window);
 
-    bool begin_frame();
-    bool end_frame(VkCommandBuffer cb);
+    int begin_frame();
+    bool end_frame(VkCommandBuffer cb, Platform_Window *window);
 
     bool create_command_buffers(int num_commands_buffers, VkCommandBuffer *command_buffers);
     Vulkan_Buffer create_vertex_index_buffer(VkDeviceSize vertex_buffer_size, void *vertex_buffer_data, VkDeviceSize index_buffer_size, void *index_buffer_data);
@@ -134,7 +136,7 @@ private:
     bool create_surface(Platform_Window *window);
     bool create_device();
     bool init_vma();
-    bool create_swap_chain();
+    bool create_swap_chain(Platform_Window *window);
     bool create_command_buffer_pool();
     bool create_synchronization_objects();
     
