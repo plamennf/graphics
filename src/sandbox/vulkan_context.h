@@ -1,19 +1,18 @@
 #pragma once
 
+#include <vma/vk_mem_alloc.h>
+
+struct Mesh_Vertex {
+    Vector3 position;
+    Vector2 uv;
+    Vector3 normal;
+    Vector3 tangent;
+    Vector3 bitangent;
+};
+
+const int NUM_FRAMES_IN_FLIGHT = 2;
+
 struct Mesh;
-
-enum Per_Scene_Descriptor_Bindings {
-    PER_SCENE_BINDING_UNIFORM,
-    NUM_PER_SCENE_BINDINGS
-};
-
-enum Per_Object_Descriptor_Bindings {
-    PER_OBJECT_BINDING_VERTEX_BUFFER,
-    PER_OBJECT_BINDING_INDEX_BUFFER,
-    PER_OBJECT_BINDING_UNIFORM,
-    PER_OBJECT_BINDING_TEXTURE,
-    NUM_PER_OBJECT_BINDINGS
-};
 
 struct Vulkan_Physical_Device {
     VkPhysicalDevice device = VK_NULL_HANDLE;
@@ -26,15 +25,8 @@ struct Vulkan_Physical_Device {
     Array <VkPresentModeKHR> present_modes;
     VkPhysicalDeviceFeatures features;
     VkFormat depth_format;
-    struct {
-        int variant;
-        int major;
-        int minor;
-        int patch;
-    } api_version;
-    Array <VkExtensionProperties> extensions;
 
-    bool is_extension_supported(const char *extension) const;
+    u32 graphics_and_present_queue_family_index = 0;
 };
 
 struct Vulkan_Physical_Devices {
@@ -42,20 +34,13 @@ struct Vulkan_Physical_Devices {
     int device_index = -1;
     
     bool init(VkInstance instance, VkSurfaceKHR surface);
-    u32 select_device(VkQueueFlags required_queue_type, bool supports_present);
+    void select_device(VkQueueFlags required_queue_type, bool supports_present);
     Vulkan_Physical_Device *get_selected();
-
-private:
-    void get_extensions(int index);
-    void get_device_api_version(int index);
 };
 
 struct Vulkan_Queue {
     VkDevice device = VK_NULL_HANDLE;
     VkSwapchainKHR swap_chain = VK_NULL_HANDLE;
-    VkQueue queue = VK_NULL_HANDLE;
-    VkSemaphore render_complete_semaphore = VK_NULL_HANDLE;
-    VkSemaphore present_complete_semaphore = VK_NULL_HANDLE;
     
     bool init(VkDevice device, VkSwapchainKHR swap_chain, u32 queue_family, u32 queue_index);
 
@@ -66,20 +51,24 @@ struct Vulkan_Queue {
     void wait_idle();
 };
 
-struct Vulkan_Buffer_And_Memory {
+struct Vulkan_Buffer {
     VkBuffer buffer = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VmaAllocation allocation = {};
     VkDeviceSize allocation_size = 0;
-    u32 size = 0;
+    VkDeviceSize size = 0;
     bool is_valid = false;
 
-    bool update(VkDevice device, void *data, u32 size);
+    // Shader device address buffers
+    void *mapped_data = NULL;
+    VkDeviceAddress device_address = {};
+
+    bool update(VmaAllocator allocator, void *data, VkDeviceSize size);
     void destroy(VkDevice device);
 };
 
 struct Vulkan_Texture {
     VkImage image = VK_NULL_HANDLE;
-    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VmaAllocation allocation = {};
     VkImageView view = VK_NULL_HANDLE;
     VkSampler sampler = VK_NULL_HANDLE;
     bool is_valid = false;
@@ -88,25 +77,14 @@ struct Vulkan_Texture {
 };
 
 struct Vulkan_Graphics_Pipeline {
-    Platform_Window *window = NULL;
-    VkDevice device = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
     VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptor_set_layout = VK_NULL_HANDLE;
-    VkDescriptorPool per_scene_descriptor_pool = VK_NULL_HANDLE;
-    VkDescriptorSetLayout per_scene_descriptor_set_layout = VK_NULL_HANDLE;
+    Array <VkDescriptorSet> descriptor_sets; // For now we create a descriptor set for every submesh. Should change that in the future.
     
-    Vulkan_Graphics_Pipeline(VkDevice device, Platform_Window *window) : window(window), device(device) {}
-    
-    bool init(VkShaderModule vs, VkShaderModule fs, VkFormat color_format, VkFormat depth_format);
-
-    // @TODO: Collapse these in a more generic function.
-    bool allocate_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images);
-    void update_descriptor_sets(Vulkan_Buffer_And_Memory vertex_buffer, Vulkan_Buffer_And_Memory index_buffer, Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Vulkan_Texture texture, Array <VkDescriptorSet> &descriptor_sets);
-
-    bool allocate_per_scene_descriptor_sets(Array <VkDescriptorSet> &descriptor_sets, int num_images);
-    void update_per_scene_descriptor_sets(Array <Vulkan_Buffer_And_Memory> const &uniform_buffers, Array <VkDescriptorSet> &descriptor_sets);
+    bool init(VkDevice device, VkShaderModule vs, VkShaderModule fs, VkFormat color_format, VkFormat depth_format, int num_submeshes);
+    void update_descriptor_set(VkDevice device, VkDescriptorSet set, Vulkan_Texture texture);
 };
 
 struct Vulkan_Context {
@@ -117,26 +95,32 @@ struct Vulkan_Context {
     Vulkan_Physical_Device *selected_physical_device;
     u32 queue_family = 0;
     VkDevice device = VK_NULL_HANDLE;
+    VmaAllocator allocator = VK_NULL_HANDLE;
     VkSwapchainKHR swap_chain = VK_NULL_HANDLE;
     VkSurfaceFormatKHR swap_chain_surface_format;
     Array <VkImage> images;
     Array <VkImageView> image_views;
     Array <Vulkan_Texture> depth_images;
     VkCommandPool command_buffer_pool;
-    Vulkan_Queue command_queue;
+
+    VkQueue graphics_and_present_queue = VK_NULL_HANDLE;
+    VkFence fences[NUM_FRAMES_IN_FLIGHT];
+    VkSemaphore present_complete_semaphores[NUM_FRAMES_IN_FLIGHT];
+    Array <VkSemaphore> render_complete_semaphores;
+
+    int frame_index = 0; // Used for resources that in flight
+    int image_index = 0; // Used for resources that depend on the swap chain buffers
+    
     VkCommandBuffer copy_command_buffer;
 
-    struct {
-        int major;
-        int minor;
-        int patch;
-    } instance_version;
-        
     bool init(Platform_Window *window);
 
-    bool create_command_buffers(int num_command_buffers, VkCommandBuffer *command_buffers);
-    Vulkan_Buffer_And_Memory create_vertex_buffer(void *data, u32 size);
-    bool create_uniform_buffers(Array <Vulkan_Buffer_And_Memory> &buffers, u32 size);
+    bool begin_frame();
+    bool end_frame(VkCommandBuffer cb);
+
+    bool create_command_buffers(int num_commands_buffers, VkCommandBuffer *command_buffers);
+    Vulkan_Buffer create_vertex_index_buffer(VkDeviceSize vertex_buffer_size, void *vertex_buffer_data, VkDeviceSize index_buffer_size, void *index_buffer_data);
+    bool create_shader_device_address_buffers(Vulkan_Buffer buffers[NUM_FRAMES_IN_FLIGHT], VkDeviceSize size);
 
     Vulkan_Texture create_texture(String filepath);
     Vulkan_Texture create_texture_image_from_data(void *data, int width, int height, VkFormat format);
@@ -145,22 +129,20 @@ struct Vulkan_Context {
     inline VkFormat get_depth_format() const { Assert(selected_physical_device); return selected_physical_device->depth_format; }
     
 private:
-    bool get_instance_version();
-    
     bool create_instance();
     bool create_debug_callback();
     bool create_surface(Platform_Window *window);
     bool create_device();
+    bool init_vma();
     bool create_swap_chain();
     bool create_command_buffer_pool();
+    bool create_synchronization_objects();
     
     bool create_depth_resources(Platform_Window *window);
-    
-    Vulkan_Buffer_And_Memory create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+
+    Vulkan_Buffer create_buffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
     bool copy_buffer(VkBuffer destination, VkBuffer source, VkDeviceSize size);
-
-    Vulkan_Buffer_And_Memory create_uniform_buffer(VkDeviceSize size);
-
+    
     Vulkan_Texture create_image(int width, int height, VkFormat format, VkImageUsageFlags usage_flags, VkMemoryPropertyFlagBits property_flags);
     bool update_texture_image(Vulkan_Texture *texture, int width, int height, VkFormat format, void *data);
 
@@ -168,8 +150,6 @@ private:
 
     bool copy_buffer_to_buffer(VkBuffer dst, VkBuffer src, VkDeviceSize size);
     bool copy_buffer_to_image(VkImage dst, VkBuffer src, int width, int height);
-    
-    void submit_copy_command();
     
     u32 get_memory_type_index(u32 memory_type_bits_mask, VkMemoryPropertyFlags required_memory_property_flags);
 };

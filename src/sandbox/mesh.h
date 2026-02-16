@@ -2,14 +2,6 @@
 
 #include "vulkan_context.h"
 
-struct Mesh_Vertex {
-    Vector3 position;
-    Vector2 uv;
-    Vector3 normal;
-    Vector3 tangent;
-    Vector3 bitangent;
-};
-
 struct Material {
     char *diffuse_texture_name;
     char *specular_texture_name;
@@ -29,20 +21,17 @@ struct Submesh {
     Material material;
     
     u32 vertex_buffer_size = 0;
-    Vulkan_Buffer_And_Memory vertex_buffer; // This is immutable and is only read from so it is only one.
-
     u32 index_buffer_size = 0;
-    Vulkan_Buffer_And_Memory index_buffer; // This is immutable and is only read from so it is only one.
+    Vulkan_Buffer vertex_index_buffer; // This is immutable and is only read from so it is only one.
 
     // These are written to and updated every frame, so there are multiple of them
     // so that we can write to one, while the gpu reads from the other
-    Array <Vulkan_Buffer_And_Memory> uniform_buffers; 
-    Array <VkDescriptorSet> descriptor_sets;
+    Vulkan_Buffer uniform_buffers[NUM_FRAMES_IN_FLIGHT]; 
     
     Vulkan_Texture texture;
 
     void destroy(VkDevice device) {
-        vertex_buffer.destroy(device);
+        vertex_index_buffer.destroy(device);
         texture.destroy(device);
     }    
 };

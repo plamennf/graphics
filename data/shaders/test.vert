@@ -1,38 +1,32 @@
 #version 460
 
-struct Vertex_Data {
-    float x, y, z;
-    float u, v;
-    float normal_x, normal_y, normal_z;
-    float tangent_x, tangent_y, tangent_z;
-    float bitangent_x, bitangent_y, bitangent_z;
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_scalar_block_layout : enable
+
+layout(location = 0) in vec3 in_position;
+layout(location = 1) in vec2 in_uv;
+layout(location = 2) in vec3 in_normal;
+layout(location = 3) in vec3 in_tangent;
+layout(location = 4) in vec3 in_bitangent;
+
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Per_Scene_Data {
+    mat4 projection_matrix;
+    mat4 view_matrix;
 };
 
-layout (set = 0, binding = 0) readonly uniform Per_Scene_Uniform_Buffer {
-    mat4 projection;
-    mat4 view;
-} per_scene_ubo;
+layout(buffer_reference, std430, buffer_reference_align = 16) readonly buffer Per_Object_Data {
+    mat4 world_matrix;
+};
 
-layout (std430, set = 1, binding = 0) readonly buffer Vertices {
-    Vertex_Data data[];
-} in_vertices;
-
-layout (set = 1, binding = 1) readonly buffer Indices {
-    int data[];
-} in_indices;
-
-layout (set = 1, binding = 2) readonly uniform Uniform_Buffer {
-    mat4 world;
-} ubo;
+layout(push_constant) uniform Push_Constants {
+    Per_Scene_Data per_scene;
+    Per_Object_Data per_object;
+};
 
 layout (location = 0) out vec2 out_uv;
 
 void main() {
-    int index = in_indices.data[gl_VertexIndex];
-    Vertex_Data vertex = in_vertices.data[index];
+    gl_Position = per_scene.projection_matrix * per_scene.view_matrix * per_object.world_matrix * vec4(in_position, 1.0);
 
-    vec3 pos = vec3(vertex.x, vertex.y, vertex.z);    
-    gl_Position = per_scene_ubo.projection * per_scene_ubo.view * ubo.world * vec4(pos, 1.0);
-
-    out_uv = vec2(vertex.u, vertex.v);
+    out_uv = in_uv;
 }

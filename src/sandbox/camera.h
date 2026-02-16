@@ -1,8 +1,10 @@
 #pragma once
 
 const float GROUND_LEVEL = 50.0f;
-const float MOVEMENT_SPEED = 50.0f;
-const float MOVEMENT_SPEED_SPRINT_MULTIPLIER = 5.0f;
+const float MOVEMENT_SPEED = 250.0f;
+const float MOVEMENT_SPEED_SPRINT_MULTIPLIER = 2.0f;
+const float JUMP_HEIGHT = 8.0f;
+const float GRAVITY = 9.81f;
 
 enum Camera_Type {
     CAMERA_TYPE_FPS,

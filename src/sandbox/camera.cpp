@@ -69,12 +69,12 @@ void fixed_update_camera_fps(Camera *camera, float dt) {
     
     if (is_key_down(&globals.window->keyboard, KEY_SPACE)) {
         if (camera->is_on_ground) {
-            camera->jump_velocity = 0.5f;
+            camera->jump_velocity = JUMP_HEIGHT;
             camera->is_on_ground  = false;
         }
     }
 
-    camera->jump_velocity -= 3.0f * dt;
+    camera->jump_velocity -= GRAVITY * dt;
 
     camera->position.y += camera->jump_velocity;
     
