@@ -1,26 +1,19 @@
 #pragma once
 
-const int MAX_PLATFORM_WINDOWS = 8;
-
-struct Platform_Window {
-    int width;
-    int height;
-    bool is_open;
-
-    Keyboard keyboard;
-    Mouse mouse;
-};
+extern int platform_window_width;
+extern int platform_window_height;
+extern bool platform_window_is_open;
 
 void platform_init();
 void platform_shutdown();
 
-Platform_Window *platform_window_create(int width, int height, String title);
+bool platform_window_create(int width, int height, String title);
 void platform_poll_events();
-void *platform_window_get_native(Platform_Window *window);
-bool platform_window_was_resized(Platform_Window *window);
-void platform_window_toggle_fullscreen(Platform_Window *window);
+void *platform_window_get_native();
+bool platform_window_was_resized();
+void platform_window_toggle_fullscreen();
 
 u64 platform_get_time_in_nanoseconds();
 
 void platform_show_and_unlock_cursor();
-void platform_hide_and_lock_cursor(Platform_Window *window);
+void platform_hide_and_lock_cursor();

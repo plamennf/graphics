@@ -2050,8 +2050,8 @@ inline void (*glPolygonOffsetClamp)(GLfloat factor, GLfloat units, GLfloat clamp
 #undef WINGDIAPI
 #endif
 
-void opengl_create_context(Platform_Window *window, int version_major, int version_minor, bool core_profile, bool require_srgb);
-void opengl_swap_buffers(Platform_Window *window);
+void opengl_create_context(int version_major, int version_minor, bool core_profile, bool require_srgb);
+void opengl_swap_buffers();
 bool opengl_set_vsync(bool vsync);
 
 void opengl_init_extensions();

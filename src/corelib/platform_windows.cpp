@@ -5,42 +5,20 @@
 #include <Windows.h>
 #include <Windowsx.h>
 
-struct Platform_Window_Windows : public Platform_Window {
-    HWND hwnd;
-    WINDOWPLACEMENT prev_wp;
-    bool was_resized;
-};
+int platform_window_width;
+int platform_window_height;
+bool platform_window_is_open;
 
-static Platform_Window_Windows created_windows[MAX_PLATFORM_WINDOWS];
-static int num_created_windows;
+HWND g_hwnd;
+WINDOWPLACEMENT prev_wp;
+bool was_resized;
 
 #define WINDOW_CLASS_NAME L"GraphicsWin32WindowClass"
-static bool window_class_initted;
 
 static LARGE_INTEGER global_perf_freq;
 static u64 nanoseconds_per_tick;
 
-static Platform_Window_Windows *add_window() {
-    Assert(num_created_windows < MAX_PLATFORM_WINDOWS);
-    
-    Platform_Window_Windows *result = &created_windows[num_created_windows++];
-
-    result->prev_wp.length = sizeof(WINDOWPLACEMENT);
-    result->was_resized    = false;
-
-    return result;
-}
-
-static Platform_Window_Windows *pop_last_window() {
-    if (num_created_windows <= 0) return NULL;
-
-    Platform_Window_Windows *result = &created_windows[num_created_windows--];
-    return result;
-}
-
 static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
-    Platform_Window_Windows *window = (Platform_Window_Windows *)GetWindowLongPtrW(hwnd, GWLP_USERDATA);
-    
     switch (msg) {
         case WM_CREATE: {
             CREATESTRUCTW *cs = (CREATESTRUCTW *)lparam;
@@ -50,19 +28,16 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
         
         case WM_CLOSE:
         case WM_DESTROY: {
-            Assert(window);
-            window->is_open = false;
+            platform_window_is_open = false;
         } break;
 
         case WM_SIZE: {
-            Assert(window);
-            
             RECT rect;
             GetClientRect(hwnd, &rect);
-            window->width  = rect.right  - rect.left;
-            window->height = rect.bottom - rect.top;
+            platform_window_width  = rect.right  - rect.left;
+            platform_window_height = rect.bottom - rect.top;
 
-            window->was_resized = true;
+            was_resized = true;
         } break;
 
         case WM_SYSCHAR: {
@@ -73,49 +48,35 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
         case WM_KEYUP:
         case WM_SYSKEYDOWN:
         case WM_SYSKEYUP: {
-            Assert(window);
-
             Key_Code key_code = (Key_Code)wparam;
             bool is_down = (msg == WM_KEYDOWN) || (msg == WM_SYSKEYDOWN);
 
-            Keyboard *keyboard = &window->keyboard;
-            set_key_state(keyboard, key_code, is_down);
+            set_key_state(key_code, is_down);
         } break;
 
         case WM_LBUTTONDOWN:
         case WM_LBUTTONUP: {
-            Assert(window);
-
             bool is_down = msg == WM_LBUTTONDOWN;
 
-            Mouse *mouse = &window->mouse;
-            set_mouse_button_state(mouse, MOUSE_BUTTON_LEFT, is_down);
+            set_mouse_button_state(MOUSE_BUTTON_LEFT, is_down);
         } break;
 
         case WM_RBUTTONDOWN:
         case WM_RBUTTONUP: {
-            Assert(window);
-
             bool is_down = msg == WM_RBUTTONDOWN;
 
-            Mouse *mouse = &window->mouse;
-            set_mouse_button_state(mouse, MOUSE_BUTTON_RIGHT, is_down);
+            set_mouse_button_state(MOUSE_BUTTON_RIGHT, is_down);
         } break;
 
         case WM_MBUTTONDOWN:
         case WM_MBUTTONUP: {
-            Assert(window);
-
             bool is_down = msg == WM_MBUTTONDOWN;
 
-            Mouse *mouse = &window->mouse;
-            set_mouse_button_state(mouse, MOUSE_BUTTON_MIDDLE, is_down);
+            set_mouse_button_state(MOUSE_BUTTON_MIDDLE, is_down);
         } break;
 
         case WM_XBUTTONDOWN:
         case WM_XBUTTONUP: {
-            Assert(window);
-            
             int button = GET_XBUTTON_WPARAM(wparam);
 
             Mouse_Button mouse_button;
@@ -130,43 +91,32 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
 
             bool is_down = msg == WM_XBUTTONDOWN;
             
-            Mouse *mouse = &window->mouse;
-            set_mouse_button_state(mouse, mouse_button, is_down);
+            set_mouse_button_state(mouse_button, is_down);
             
             return TRUE;
         } break;
 
         case WM_MOUSEMOVE: {
-            Assert(window);
-
             int x_pos = GET_X_LPARAM(lparam);
             int y_pos = GET_Y_LPARAM(lparam);
 
-            Mouse *mouse = &window->mouse;
+            mouse_cursor_x_delta = x_pos - mouse_cursor_x;
+            mouse_cursor_y_delta = mouse_cursor_y - y_pos;
 
-            mouse->cursor_x_delta = x_pos - mouse->cursor_x;
-            mouse->cursor_y_delta = mouse->cursor_y - y_pos;
-
-            mouse->cursor_x = x_pos;
-            mouse->cursor_y = y_pos;
+            mouse_cursor_x = x_pos;
+            mouse_cursor_y = y_pos;
         } break;
 
         case WM_MOUSEWHEEL: {
-            Assert(window);
-
             int total_wheel_delta = GET_WHEEL_DELTA_WPARAM(wparam);
 
-            Mouse *mouse = &window->mouse;
-            mouse->scroll_wheel_y_delta = total_wheel_delta / WHEEL_DELTA; // 120
+            mouse_scroll_wheel_y_delta = total_wheel_delta / WHEEL_DELTA; // 120
         } break;
 
         case WM_MOUSEHWHEEL: {
-            Assert(window);
-
             int total_wheel_delta = GET_WHEEL_DELTA_WPARAM(wparam);
 
-            Mouse *mouse = &window->mouse;
-            mouse->scroll_wheel_x_delta = total_wheel_delta / WHEEL_DELTA; // 120
+            mouse_scroll_wheel_x_delta = total_wheel_delta / WHEEL_DELTA; // 120
         } break;
             
         default: {
@@ -177,9 +127,7 @@ static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LP
     return 0;
 }
 
-static void init_window_class() {
-    if (window_class_initted) return;
-
+bool platform_window_create(int width, int height, String title) {
     WNDCLASSEXW wc   = {};
     wc.cbSize        = sizeof(wc);
     wc.style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
@@ -193,16 +141,7 @@ static void init_window_class() {
 
     if (RegisterClassExW(&wc) == 0) {
         logprintf("Failed to register the window class!\n");
-        return;
-    }
-    
-    window_class_initted = true;
-}
-
-Platform_Window *platform_window_create(int width, int height, String title) {
-    if (!window_class_initted) {
-        init_window_class();
-        if (!window_class_initted) return NULL;
+        return false;
     }
 
     if (width <= 0 || height <= 0) {
@@ -217,8 +156,6 @@ Platform_Window *platform_window_create(int width, int height, String title) {
         height = (int)((double)desktop_height * 2.0/3.0);
     }
 
-    Platform_Window_Windows *result = add_window();
-
     DWORD window_style = WS_OVERLAPPEDWINDOW;
     
     RECT  window_rect  = {0, 0, width, height};
@@ -229,18 +166,17 @@ Platform_Window *platform_window_create(int width, int height, String title) {
 
     wchar_t wide_title[4096] = {};
     MultiByteToWideChar(CP_UTF8, 0, title.data, title.length, wide_title, ArrayCount(wide_title));
-    result->hwnd = CreateWindowExW(0, WINDOW_CLASS_NAME, wide_title, window_style,
-                                   CW_USEDEFAULT, CW_USEDEFAULT,
-                                   window_width, window_height,
-                                   NULL, NULL, GetModuleHandleW(NULL), result);
-    if (result->hwnd == NULL) {
+    g_hwnd = CreateWindowExW(0, WINDOW_CLASS_NAME, wide_title, window_style,
+                             CW_USEDEFAULT, CW_USEDEFAULT,
+                             window_width, window_height,
+                             NULL, NULL, GetModuleHandleW(NULL), NULL);
+    if (g_hwnd == NULL) {
         logprintf("Failed to create window!\n");
-        pop_last_window();
-        return NULL;
+        return false;
     }
 
     MONITORINFOEXW mi = { sizeof(mi) };
-    GetMonitorInfoW(MonitorFromWindow(result->hwnd, MONITOR_DEFAULTTOPRIMARY), &mi);
+    GetMonitorInfoW(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTOPRIMARY), &mi);
 
     int monitor_width_without_taskbar  = mi.rcWork.right  - mi.rcWork.left;
     int monitor_height_without_taskbar = mi.rcWork.bottom - mi.rcWork.top;
@@ -248,30 +184,27 @@ Platform_Window *platform_window_create(int width, int height, String title) {
     int window_x = mi.rcWork.left + ((monitor_width_without_taskbar  - window_width)  / 2);
     int window_y = mi.rcWork.top  + ((monitor_height_without_taskbar - window_height) / 2);
 
-    SetWindowPos(result->hwnd, HWND_TOP, window_x, window_y, 0, 0, SWP_NOSIZE);
+    SetWindowPos(g_hwnd, HWND_TOP, window_x, window_y, 0, 0, SWP_NOSIZE);
 
-    UpdateWindow(result->hwnd);
-    ShowWindow(result->hwnd, SW_SHOWDEFAULT);
+    UpdateWindow(g_hwnd);
+    ShowWindow(g_hwnd, SW_SHOWDEFAULT);
 
-    result->width   = width;
-    result->height  = height;
-    result->is_open = true;
+    platform_window_width   = width;
+    platform_window_height  = height;
+    platform_window_is_open = true;
 
-    return result;
+    return true;
 }
 
 void platform_poll_events() {
-    for (int i = 0; i < num_created_windows; i++) {
-        Platform_Window *window = &created_windows[i];
-        clear_key_states(&window->keyboard);
-        clear_mouse_button_states(&window->mouse);
+    clear_key_states();
+    clear_mouse_button_states();
+    
+    mouse_cursor_x_delta = 0;
+    mouse_cursor_y_delta = 0;
 
-        window->mouse.cursor_x_delta = 0;
-        window->mouse.cursor_y_delta = 0;
-
-        window->mouse.scroll_wheel_x_delta = 0;
-        window->mouse.scroll_wheel_y_delta = 0;
-    }
+    mouse_scroll_wheel_x_delta = 0;
+    mouse_scroll_wheel_y_delta = 0;
     
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -280,53 +213,45 @@ void platform_poll_events() {
     }
 }
 
-void *platform_window_get_native(Platform_Window *_window) {
-    Assert(_window);
-    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
-    return (void *)window->hwnd;
+void *platform_window_get_native() {
+    return (void *)g_hwnd;
 }
 
-bool platform_window_was_resized(Platform_Window *_window) {
-    Assert(_window);
-    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
-
-    bool result = window->was_resized;
-    window->was_resized = false;
+bool platform_window_was_resized() {
+    bool result = was_resized;
+    was_resized = false;
     return result;
 }
 
 // From https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
-void platform_window_toggle_fullscreen(Platform_Window *_window) {
-    Assert(_window);
-    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
-    
-    DWORD style = GetWindowLong(window->hwnd, GWL_STYLE);
+void platform_window_toggle_fullscreen() {
+    DWORD style = GetWindowLong(g_hwnd, GWL_STYLE);
     if (style & WS_OVERLAPPEDWINDOW) {
         MONITORINFO mi = { sizeof(mi) };
-        if (GetWindowPlacement(window->hwnd, &window->prev_wp) &&
-            GetMonitorInfo(MonitorFromWindow(window->hwnd,
+        if (GetWindowPlacement(g_hwnd, &prev_wp) &&
+            GetMonitorInfo(MonitorFromWindow(g_hwnd,
                                              MONITOR_DEFAULTTOPRIMARY), &mi)) {
-            SetWindowLong(window->hwnd, GWL_STYLE,
+            SetWindowLong(g_hwnd, GWL_STYLE,
                           style & ~WS_OVERLAPPEDWINDOW);
-            SetWindowPos(window->hwnd, HWND_TOP,
+            SetWindowPos(g_hwnd, HWND_TOP,
                          mi.rcMonitor.left, mi.rcMonitor.top,
                          mi.rcMonitor.right - mi.rcMonitor.left,
                          mi.rcMonitor.bottom - mi.rcMonitor.top,
                          SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
         }
     } else {
-        SetWindowLong(window->hwnd, GWL_STYLE,
+        SetWindowLong(g_hwnd, GWL_STYLE,
                       style | WS_OVERLAPPEDWINDOW);
-        SetWindowPlacement(window->hwnd, &window->prev_wp);
-        SetWindowPos(window->hwnd, NULL, 0, 0, 0, 0,
+        SetWindowPlacement(g_hwnd, &prev_wp);
+        SetWindowPos(g_hwnd, NULL, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                      SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
     }
 
     RECT rect;
-    GetClientRect(window->hwnd, &rect);
-    window->width  = rect.right  - rect.left;
-    window->height = rect.bottom - rect.top;
+    GetClientRect(g_hwnd, &rect);
+    platform_window_width  = rect.right  - rect.left;
+    platform_window_height = rect.bottom - rect.top;
 }
 
 void platform_init() {
@@ -463,9 +388,7 @@ static HGLRC(*wglCreateContextAttribsARB)(HDC hDC, HGLRC hShareContext, const in
 static BOOL(*wglChoosePixelFormatARB)(HDC hdc, const int *piAttribIList, const FLOAT *pfAttribFList, UINT nMaxFormats, int *piFormats, UINT *nNumFormats);
 static BOOL(*wglSwapIntervalEXT)(int interval);
 
-void opengl_create_context(Platform_Window *_window, int version_major, int version_minor, bool core_profile, bool require_srgb) {
-    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
-    
+void opengl_create_context(int version_major, int version_minor, bool core_profile, bool require_srgb) {
     // Get wgl functions
     {
         HWND dummy = CreateWindowExW(0, L"STATIC", L"DummyWindow", WS_OVERLAPPED,
@@ -503,7 +426,7 @@ void opengl_create_context(Platform_Window *_window, int version_major, int vers
     }
     
     // Set pixel format for OpenGL context
-    HDC dc = GetDC(window->hwnd);
+    HDC dc = GetDC(g_hwnd);
 
     {
         int attrib[] = {
@@ -569,11 +492,8 @@ bool opengl_set_vsync(bool vsync) {
     return true;
 }
 
-void opengl_swap_buffers(Platform_Window *_window) {
-    Assert(_window);
-    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
-    
-    HDC dc = GetDC(window->hwnd);
+void opengl_swap_buffers() {
+    HDC dc = GetDC(g_hwnd);
     SwapBuffers(dc);
 }
 
@@ -587,11 +507,8 @@ void platform_show_and_unlock_cursor() {
     }
 }
 
-void platform_hide_and_lock_cursor(Platform_Window *_window) {
-    Assert(_window);
-    Platform_Window_Windows *window = (Platform_Window_Windows *)_window;
-
-    HWND hwnd = window->hwnd;
+void platform_hide_and_lock_cursor() {
+    HWND hwnd = g_hwnd;
 
     // Hide cursor
     while (ShowCursor(FALSE) >= 0) {
@@ -619,13 +536,12 @@ void platform_hide_and_lock_cursor(Platform_Window *_window) {
     POINT old_point;
     GetCursorPos(&old_point);
     
-    // Optional: center cursor
     int center_x = (rect.left + rect.right) / 2;
     int center_y = (rect.top + rect.bottom) / 2;
     SetCursorPos(center_x, center_y);
 
-    window->mouse.cursor_x_delta = old_point.x - center_x;
-    window->mouse.cursor_y_delta = center_y - old_point.y;
+    mouse_cursor_x_delta = old_point.x - center_x;
+    mouse_cursor_y_delta = center_y - old_point.y;
 }
 
 #endif
