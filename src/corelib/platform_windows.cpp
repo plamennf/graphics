@@ -322,6 +322,11 @@ void platform_window_toggle_fullscreen(Platform_Window *_window) {
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                      SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
     }
+
+    RECT rect;
+    GetClientRect(window->hwnd, &rect);
+    window->width  = rect.right  - rect.left;
+    window->height = rect.bottom - rect.top;
 }
 
 void platform_init() {
