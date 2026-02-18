@@ -1,8 +1,21 @@
 #include "pch.h"
+#include "renderer.h"
+#include "mesh.h"
 
 #include <stdio.h>
 
 Global_Variables globals;
+
+static Mesh mesh;
+
+static void draw_one_frame() {
+    Per_Scene_Uniforms per_scene_uniforms;
+    per_scene_uniforms.projection_matrix = make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 1000.0f);
+    per_scene_uniforms.view_matrix = matrix4_identity();
+    set_per_scene_uniforms(per_scene_uniforms);
+
+    render_mesh(&mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+}
 
 int main(int argc, char *argv[]) {
     init_temporary_storage(Megabytes(1));
@@ -14,12 +27,10 @@ int main(int argc, char *argv[]) {
     defer { platform_shutdown(); };
     
     if (!platform_window_create(0, 0, "Sandbox")) return false;
-    opengl_create_context(4, 5, true, true);
-    opengl_set_vsync(true);
-    opengl_init_extensions();
+    init_renderer(true);
 
-    glEnable(GL_FRAMEBUFFER_SRGB);
-    glDisable(GL_MULTISAMPLE);
+    if (!load_mesh(&mesh, "data/meshes/Demon.gltf")) return false;
+    generate_gpu_data_for_mesh(&mesh);
     
     bool should_show_cursor = true;
 
@@ -60,6 +71,10 @@ int main(int argc, char *argv[]) {
             platform_hide_and_lock_cursor();
         }
 
+        if (platform_window_was_resized()) {
+            resize_renderer();
+        }
+
         if (!should_show_cursor) {
             //update_camera(&camera, CAMERA_TYPE_FPS, dt);
         }
@@ -71,10 +86,9 @@ int main(int argc, char *argv[]) {
             accumulated_dt -= fixed_update_dt;
         }
 
-        glClearColor(0.2f, 0.5f, 0.8f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        draw_one_frame();
         
-        opengl_swap_buffers();
+        render_frame_and_present(v4(0.2f, 0.5f, 0.8f, 1.0f));
     }
     
     return 0;

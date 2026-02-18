@@ -86,9 +86,11 @@ project "sandbox"
     filter "system:windows"
 		systemversion "latest"
 
+        defines { "RENDER_D3D11" }
+
         links {
             "winmm.lib",
-            "vulkan-1.lib",
+            "d3d11.lib",
             "opengl32.lib",
             "freetype.lib",
         }

@@ -252,6 +252,8 @@ void platform_window_toggle_fullscreen() {
     GetClientRect(g_hwnd, &rect);
     platform_window_width  = rect.right  - rect.left;
     platform_window_height = rect.bottom - rect.top;
+
+    //was_resized = true;
 }
 
 void platform_init() {
