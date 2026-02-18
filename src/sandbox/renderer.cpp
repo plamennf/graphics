@@ -43,12 +43,6 @@ bool load_texture(Texture *texture, String _filepath) {
     return true;
 }
 
-static bool file_exists(const char *filepath) {
-    FILE *file = fopen(filepath, "rb");
-    if (!file) return false;
-    return true;
-}
-
 bool generate_gpu_data_for_mesh(Mesh *mesh) {
     Assert(mesh);
     
@@ -59,30 +53,7 @@ bool generate_gpu_data_for_mesh(Mesh *mesh) {
 
         if (!create_gpu_buffer(&submesh->index_buffer, GPU_BUFFER_TYPE_INDEX, submesh->num_indices * sizeof(u32), 0, submesh->indices, false)) return false;
 
-        // TODO: Switch to using a texture catalog
-        submesh->material.diffuse_texture = new Texture();
-
-        const char *extensions[] = {
-            "png",
-            "jpg",
-            "bmp",
-        };
-        
-        char full_path[256]; bool full_path_exists = false;
-        for (int i = 0; i < ArrayCount(extensions); i++) {
-            snprintf(full_path, sizeof(full_path), "data/textures/%s.%s", (const char *)submesh->material.diffuse_texture_name, extensions[i]);
-            if (file_exists(full_path)) {
-                full_path_exists = true;
-                break;
-            }
-        }
-
-        if (!full_path_exists) {
-            logprintf("No texture '%s' found in 'data/textures'\n", submesh->material.diffuse_texture_name);
-            return false;
-        }
-        
-        if (!load_texture(submesh->material.diffuse_texture, full_path)) return false;
+        submesh->material.diffuse_texture = globals.texture_registry->find_or_load(submesh->material.diffuse_texture_name);
     }
 
     return true;
@@ -115,6 +86,7 @@ void render_mesh(Mesh *mesh, Vector3 position, Vector3 rotation, Vector3 scale, 
         info.uniforms.diffuse_color.z = submesh->material.diffuse_color.z * color.z;
         info.uniforms.diffuse_color.w = submesh->material.diffuse_color.w * color.w;
         info.uniforms.shininess       = submesh->material.shininess;
+        info.uniforms.is_the_cube     = submesh->material.is_the_cube;
         
         add_render_mesh_info(&info);
     }

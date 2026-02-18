@@ -6,7 +6,8 @@
 
 Global_Variables globals;
 
-static Mesh mesh;
+static Mesh *mesh;
+static Mesh *cube;
 
 static void draw_one_frame() {
     Per_Scene_Uniforms per_scene_uniforms;
@@ -14,7 +15,8 @@ static void draw_one_frame() {
     per_scene_uniforms.view_matrix = matrix4_identity();
     set_per_scene_uniforms(per_scene_uniforms);
 
-    render_mesh(&mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+    render_mesh(cube, v3(-200, -3, -200), v3(0, 0, 0), v3(400, 1, 400), v4(1, 1, 1, 1));
+    render_mesh(mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
 }
 
 int main(int argc, char *argv[]) {
@@ -29,8 +31,15 @@ int main(int argc, char *argv[]) {
     if (!platform_window_create(0, 0, "Sandbox")) return false;
     init_renderer(true);
 
-    if (!load_mesh(&mesh, "data/meshes/Demon.gltf")) return false;
-    generate_gpu_data_for_mesh(&mesh);
+    globals.texture_registry = new Texture_Registry();
+    globals.mesh_registry    = new Mesh_Registry();
+
+    mesh = globals.mesh_registry->find_or_load("Demon");
+    if (!mesh) return 1;
+
+    cube = globals.mesh_registry->find_or_load("Cube");
+    if (!cube) return 1;
+    cube->submeshes[0].material.is_the_cube = 1.0f;
     
     bool should_show_cursor = true;
 

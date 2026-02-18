@@ -7,6 +7,7 @@ cbuffer Per_Object_Uniforms : register(b1) {
     float4x4 world_matrix;
     float4 material_diffuse_color;
     float material_shininess;
+    float is_the_cube;
 }
 
 struct Mesh_Vertex_Input {

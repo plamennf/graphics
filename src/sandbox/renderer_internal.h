@@ -4,7 +4,8 @@ struct Per_Object_Uniforms {
     Matrix4 world_matrix;
     Vector4 diffuse_color;
     float shininess;
-    float padding[3];
+    float is_the_cube;
+    float padding[2];
 };
 
 struct Render_Mesh_Info {

@@ -8,6 +8,7 @@
 #include "memory_arena.h"
 #include "temporary_storage.h"
 #include "array.h"
+#include "hash_table.h"
 
 #include "math/geometry.h"
 #include "math/vector2.h"
