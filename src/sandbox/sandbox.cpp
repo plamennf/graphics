@@ -1,15 +1,19 @@
 #include "pch.h"
 #include "renderer.h"
 #include "mesh.h"
+#include "camera.h"
 
 #include <imgui.h>
 
 #include <stdio.h>
 
+#define DO_SPONZA
+
 Global_Variables globals;
 
 static Mesh *mesh;
 static Mesh *cube;
+static Camera camera;
 
 static void imgui_init() {
     float main_scale = platform_imgui_get_scale();
@@ -57,12 +61,16 @@ static void imgui_end_frame() {
 
 static void draw_one_frame() {
     Per_Scene_Uniforms per_scene_uniforms;
-    per_scene_uniforms.projection_matrix = make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 1000.0f);
-    per_scene_uniforms.view_matrix = matrix4_identity();
+    per_scene_uniforms.projection_matrix = make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 2000.0f);
+    per_scene_uniforms.view_matrix = get_view_matrix(&camera);
     set_per_scene_uniforms(per_scene_uniforms);
 
+#ifdef DO_SPONZA
+    render_mesh(mesh, v3(0, 0, 0), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+#else
     render_mesh(cube, v3(-200, -3, -200), v3(0, 0, 0), v3(400, 1, 400), v4(1, 1, 1, 1));
     render_mesh(mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+#endif
 }
 
 static void draw_imgui_stuff(float dt) {
@@ -93,19 +101,28 @@ int main(int argc, char *argv[]) {
     if (!platform_window_create(0, 0, "Sandbox")) return false;
     init_renderer(false);
     imgui_init();
-
+    
     globals.texture_registry = new Texture_Registry();
     globals.mesh_registry    = new Mesh_Registry();
 
+#ifdef DO_SPONZA
+    mesh = globals.mesh_registry->find_or_load("Sponza");
+    if (!mesh) return 1;
+#else
     mesh = globals.mesh_registry->find_or_load("Demon");
     if (!mesh) return 1;
 
     cube = globals.mesh_registry->find_or_load("Cube");
     if (!cube) return 1;
     cube->submeshes[0].material.is_the_cube = 1.0f;
-    
-    bool should_show_cursor = true;
+#endif
 
+    platform_window_toggle_fullscreen();
+    
+    bool should_show_cursor = false;
+
+    init_camera(&camera, v3(0, 2, 0), 0, 0, 0);
+    
     float fixed_update_dt = 1.0f / 60.0f;
     u64 last_time = platform_get_time_in_nanoseconds();
     float accumulated_dt = 0.0f;
@@ -148,12 +165,12 @@ int main(int argc, char *argv[]) {
         }
 
         if (!should_show_cursor) {
-            //update_camera(&camera, CAMERA_TYPE_FPS, dt);
+            update_camera(&camera, CAMERA_TYPE_FPS, dt);
         }
 
         while (accumulated_dt >= fixed_update_dt) {
             if (!should_show_cursor) {
-                //fixed_update_camera(&camera, CAMERA_TYPE_FPS, fixed_update_dt);
+                fixed_update_camera(&camera, CAMERA_TYPE_FPS, fixed_update_dt);
             }
             accumulated_dt -= fixed_update_dt;
         }
