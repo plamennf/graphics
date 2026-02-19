@@ -327,6 +327,11 @@ u64 platform_get_time_in_nanoseconds() {
 // OpenGL
 //
 
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+
 #define LoadGLFunc(func) func = reinterpret_cast <decltype(func)>(wglGetProcAddress(#func))
 
 #define WGL_CONTEXT_DEBUG_BIT_ARB         0x00000001

@@ -109,6 +109,7 @@ project "sandbox"
         links {
             "winmm.lib",
             "d3d11.lib",
+            "dxgi.lib",
             "opengl32.lib",
             "freetype.lib",
         }

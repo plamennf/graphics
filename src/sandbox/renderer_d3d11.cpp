@@ -4,6 +4,7 @@
 #include "renderer_internal.h"
 
 #include <d3d11.h>
+#include <dxgi1_6.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <float.h>
@@ -122,6 +123,15 @@ void init_renderer(bool vsync) {
     swap_chain_desc.SwapEffect        = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swap_chain_desc.Flags             = swap_chain_flags;
 
+    IDXGIFactory6 *factory = NULL;
+    defer { SafeRelease(factory); };
+    CreateDXGIFactory1(IID_PPV_ARGS(&factory));
+
+    IDXGIAdapter1 *adapter = NULL;
+    defer { SafeRelease(adapter); };
+    
+    factory->EnumAdapterByGpuPreference(0, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter));
+    
     D3D_FEATURE_LEVEL feature_levels[] = { D3D_FEATURE_LEVEL_11_0 };
 
     UINT create_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED;
@@ -129,7 +139,7 @@ void init_renderer(bool vsync) {
     create_flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
     
-    D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, create_flags, feature_levels, ArrayCount(feature_levels), D3D11_SDK_VERSION, &swap_chain_desc, &swap_chain, &device, NULL, &device_context);
+    D3D11CreateDeviceAndSwapChain(adapter, D3D_DRIVER_TYPE_UNKNOWN, NULL, create_flags, feature_levels, ArrayCount(feature_levels), D3D11_SDK_VERSION, &swap_chain_desc, &swap_chain, &device, NULL, &device_context);
 
     Assert(swap_chain);
     Assert(device);
