@@ -2,12 +2,58 @@
 #include "renderer.h"
 #include "mesh.h"
 
+#include <imgui.h>
+
 #include <stdio.h>
 
 Global_Variables globals;
 
 static Mesh *mesh;
 static Mesh *cube;
+
+static void imgui_init() {
+    float main_scale = platform_imgui_get_scale();
+    
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+    ImGui::StyleColorsDark();
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+    style.ScaleAllSizes(main_scale);
+    style.FontScaleDpi = main_scale;  
+    
+    platform_imgui_init();
+
+#ifdef RENDER_D3D11
+    extern void imgui_init_dx11();
+    imgui_init_dx11();
+#endif
+}
+
+static void imgui_begin_frame() {
+#ifdef RENDER_D3D11
+    extern void imgui_begin_frame_dx11();
+    imgui_begin_frame_dx11();
+#endif
+
+    platform_imgui_begin_frame();
+
+    ImGui::NewFrame();
+}
+
+static void imgui_end_frame() {
+    ImGui::Render();
+
+#ifdef RENDER_D3D11
+    extern void imgui_end_frame_dx11();
+    imgui_end_frame_dx11();
+#endif
+}
 
 static void draw_one_frame() {
     Per_Scene_Uniforms per_scene_uniforms;
@@ -17,6 +63,22 @@ static void draw_one_frame() {
 
     render_mesh(cube, v3(-200, -3, -200), v3(0, 0, 0), v3(400, 1, 400), v4(1, 1, 1, 1));
     render_mesh(mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+}
+
+static void draw_imgui_stuff(float dt) {
+    static float current_dt = 1.0f;
+    static int frame_counter = 0;
+
+    frame_counter++;
+    if (frame_counter > 30) {
+        current_dt = dt;
+        frame_counter = 0;
+    }
+    
+    ImGui::Begin("Frame stats");
+    ImGui::Text("FPS: %d", (int)(1.0f / current_dt));
+    ImGui::Text("Frame time: %.2fms", current_dt * 1000.0f);
+    ImGui::End();
 }
 
 int main(int argc, char *argv[]) {
@@ -29,7 +91,8 @@ int main(int argc, char *argv[]) {
     defer { platform_shutdown(); };
     
     if (!platform_window_create(0, 0, "Sandbox")) return false;
-    init_renderer(true);
+    init_renderer(false);
+    imgui_init();
 
     globals.texture_registry = new Texture_Registry();
     globals.mesh_registry    = new Mesh_Registry();
@@ -98,6 +161,11 @@ int main(int argc, char *argv[]) {
         draw_one_frame();
         
         render_frame(v4(0.2f, 0.5f, 0.8f, 1.0f));
+
+        imgui_begin_frame();
+        draw_imgui_stuff(dt);
+        imgui_end_frame();
+        
         swap_buffers();
     }
     

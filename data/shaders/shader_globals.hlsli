@@ -18,6 +18,12 @@ struct Mesh_Vertex_Input {
     float3 bitangent : BITANGENT;
 };
 
+struct Quad_Vertex_Input {
+    float2 position  : POSITION;
+    float4 color     : COLOR;
+    float2 uv        : TEXCOORD;
+};
+
 SamplerState sampler_point  : register(s0);
 SamplerState sampler_linear : register(s1);
 

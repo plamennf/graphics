@@ -21,14 +21,23 @@ project "corelib"
 	pchheader "corelib.h"
 	pchsource "src/corelib/make_pch.cpp"
 
+    includedirs {
+        "external/include"
+    }
+
     files {
         "src/corelib/**.h",
         "src/corelib/**.cpp",
+        "external/src/imgui/**.cpp",
     }
 
     defines {
-		"_CRT_SECURE_NO_WARNINGS"
+		"_CRT_SECURE_NO_WARNINGS",
+        "ENABLE_IMGUI",
 	}
+
+    filter "files:external/src/imgui/**.cpp"
+	    enablepch "off"
 
     filter "system:windows"
 		systemversion "latest"
@@ -77,11 +86,16 @@ project "sandbox"
     files {
         "src/sandbox/**.h",
         "src/sandbox/**.cpp",
+        "extenral/src/imgui/**.cpp",
     }
 
     defines {
-		"_CRT_SECURE_NO_WARNINGS"
+		"_CRT_SECURE_NO_WARNINGS",
+        "ENABLE_IMGUI",
 	}
+
+    filter "files:external/src/imgui/**.cpp"
+	    enablepch "off"
 
     filter "system:windows"
 		systemversion "latest"

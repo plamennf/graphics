@@ -8,6 +8,12 @@
 
 struct Mesh;
 
+struct Quad_Vertex {
+    Vector2 position;
+    Vector4 color;
+    Vector2 uv;
+};
+
 struct Per_Scene_Uniforms {
     Matrix4 projection_matrix;
     Matrix4 view_matrix;
@@ -15,6 +21,7 @@ struct Per_Scene_Uniforms {
 
 enum Render_Vertex_Type {
     RENDER_VERTEX_TYPE_MESH,
+    RENDER_VERTEX_TYPE_QUAD,
 };
 
 enum Gpu_Buffer_Type {

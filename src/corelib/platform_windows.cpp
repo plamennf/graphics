@@ -5,6 +5,8 @@
 #include <Windows.h>
 #include <Windowsx.h>
 
+#include "imgui_impl_win32.h"
+
 int platform_window_width;
 int platform_window_height;
 bool platform_window_is_open;
@@ -19,6 +21,10 @@ static LARGE_INTEGER global_perf_freq;
 static u64 nanoseconds_per_tick;
 
 static LRESULT CALLBACK platform_wnd_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam))
+        return true;
+    
     switch (msg) {
         case WM_CREATE: {
             CREATESTRUCTW *cs = (CREATESTRUCTW *)lparam;
@@ -544,6 +550,20 @@ void platform_hide_and_lock_cursor() {
 
     mouse_cursor_x_delta = old_point.x - center_x;
     mouse_cursor_y_delta = center_y - old_point.y;
+}
+
+void platform_imgui_init() {
+    ImGui_ImplWin32_Init(g_hwnd);
+}
+
+void platform_imgui_begin_frame() {
+    ImGui_ImplWin32_NewFrame();
+}
+
+float platform_imgui_get_scale() {
+    ImGui_ImplWin32_EnableDpiAwareness();
+    float result = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTOPRIMARY));
+    return result;
 }
 
 #endif

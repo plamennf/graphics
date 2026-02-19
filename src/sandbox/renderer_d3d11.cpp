@@ -8,11 +8,18 @@
 #include <stdlib.h>
 #include <float.h>
 
+#include <imgui.h>
+
+#ifdef RENDER_D3D11
+#include <imgui_impl_dx11.h>
+#endif
+
 #define SafeRelease(ptr) if (ptr) { ptr->Release(); ptr = NULL; }
 
 static bool should_vsync;
 
 extern Shader shader_basic;
+extern Shader shader_resolve;
 
 extern bool init_shaders();
 
@@ -24,6 +31,10 @@ static u32 swap_chain_flags;
 static ID3D11Texture2D *back_buffer_texture = NULL;
 static ID3D11RenderTargetView *back_buffer_rtv = NULL;
 
+static ID3D11Texture2D *offscreen_buffer_texture = NULL;
+static ID3D11RenderTargetView *offscreen_buffer_rtv = NULL;
+static ID3D11ShaderResourceView *offscreen_buffer_srv = NULL;
+
 static ID3D11Texture2D *depth_buffer_texture = NULL;
 static ID3D11DepthStencilView *depth_buffer_dsv = NULL;
 
@@ -32,6 +43,12 @@ static ID3D11SamplerState *sampler_linear = NULL;
 
 static Gpu_Buffer per_scene_cb;
 static Gpu_Buffer per_object_cb;
+
+static Gpu_Buffer fullscreen_quad_vb;
+static Gpu_Buffer fullscreen_quad_ib;
+static ID3D11InputLayout *quad_input_layout = NULL;
+static ID3D11RasterizerState *quad_rasterizer_state = NULL;
+static ID3D11DepthStencilState *quad_depth_stencil_state = NULL;
 
 static ID3D11InputLayout *mesh_vertex_input_layout = NULL;
 static ID3D11RasterizerState *rasterizer_state_for_mesh_rendering = NULL;
@@ -43,7 +60,6 @@ static void init_back_buffer() {
     D3D11_RENDER_TARGET_VIEW_DESC rtv_desc = {};
     rtv_desc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
     rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-
     device->CreateRenderTargetView(back_buffer_texture, &rtv_desc, &back_buffer_rtv);
 
     D3D11_TEXTURE2D_DESC texture_desc = {};
@@ -56,19 +72,35 @@ static void init_back_buffer() {
     texture_desc.SampleDesc.Quality = 0;
     texture_desc.Usage              = D3D11_USAGE_DEFAULT;
     texture_desc.BindFlags          = D3D11_BIND_DEPTH_STENCIL;
-
     device->CreateTexture2D(&texture_desc, NULL, &depth_buffer_texture);
 
     D3D11_DEPTH_STENCIL_VIEW_DESC dsv_desc = {};
     dsv_desc.Format        = texture_desc.Format;
     dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-
     device->CreateDepthStencilView(depth_buffer_texture, &dsv_desc, &depth_buffer_dsv);
+
+    texture_desc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    texture_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    device->CreateTexture2D(&texture_desc, NULL, &offscreen_buffer_texture);
+
+    rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    device->CreateRenderTargetView(offscreen_buffer_texture, &rtv_desc, &offscreen_buffer_rtv);
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+    srv_desc.Format                    = texture_desc.Format;
+    srv_desc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Texture2D.MostDetailedMip = 0;
+    srv_desc.Texture2D.MipLevels       = 1;
+    device->CreateShaderResourceView(offscreen_buffer_texture, &srv_desc, &offscreen_buffer_srv);
 }
 
 static void release_back_buffer() {
     SafeRelease(depth_buffer_dsv);
     SafeRelease(depth_buffer_texture);
+
+    SafeRelease(offscreen_buffer_srv);
+    SafeRelease(offscreen_buffer_rtv);
+    SafeRelease(offscreen_buffer_texture);
     
     SafeRelease(back_buffer_rtv);
     SafeRelease(back_buffer_texture);
@@ -111,6 +143,26 @@ void init_renderer(bool vsync) {
 
     render_commands     = new Render_Command[MAX_RENDER_COMMANDS];
     num_render_commands = 0;
+
+    //
+    // Create fullscreen quad resources
+    //
+    {
+        Quad_Vertex vertices[] = {
+            { { -1.0f, -1.0f }, { 1, 1, 1, 1 }, { 0.0f, 1.0f } },
+            { { +1.0f, -1.0f }, { 1, 1, 1, 1 }, { 1.0f, 1.0f } },
+            { { +1.0f, +1.0f }, { 1, 1, 1, 1 }, { 1.0f, 0.0f } },
+            { { -1.0f, +1.0f }, { 1, 1, 1, 1 }, { 0.0f, 0.0f } },
+        };
+
+        u32 indices[] = {
+            0, 1, 2,
+            0, 2, 3,
+        };
+        
+        create_gpu_buffer(&fullscreen_quad_vb, GPU_BUFFER_TYPE_VERTEX, sizeof(vertices), sizeof(Quad_Vertex), vertices, false);
+        create_gpu_buffer(&fullscreen_quad_ib, GPU_BUFFER_TYPE_INDEX, sizeof(indices), 0, indices, false);
+    }
     
     //
     // Create sampler states
@@ -156,6 +208,9 @@ void init_renderer(bool vsync) {
         rasterizer_desc.ScissorEnable         = FALSE;
         device->CreateRasterizerState(&rasterizer_desc, &rasterizer_state_for_mesh_rendering);
         Assert(rasterizer_state_for_mesh_rendering);
+
+        rasterizer_desc.CullMode = D3D11_CULL_NONE;
+        device->CreateRasterizerState(&rasterizer_desc, &quad_rasterizer_state);
     }
 
     //
@@ -168,6 +223,11 @@ void init_renderer(bool vsync) {
         depth_stencil_desc.DepthFunc      = D3D11_COMPARISON_LESS_EQUAL;
         device->CreateDepthStencilState(&depth_stencil_desc, &depth_stencil_state_for_mesh_rendering);
         Assert(depth_stencil_state_for_mesh_rendering);
+
+        depth_stencil_desc.DepthEnable    = FALSE;
+        depth_stencil_desc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ZERO;
+        device->CreateDepthStencilState(&depth_stencil_desc, &quad_depth_stencil_state);
+        Assert(quad_depth_stencil_state);
     }
 }
 
@@ -178,9 +238,9 @@ void resize_renderer() {
 }
 
 void render_frame(Vector4 clear_color) {
-    device_context->ClearRenderTargetView(back_buffer_rtv, &clear_color.x);
+    device_context->ClearRenderTargetView(offscreen_buffer_rtv, &clear_color.x);
     device_context->ClearDepthStencilView(depth_buffer_dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
-    device_context->OMSetRenderTargets(1, &back_buffer_rtv, depth_buffer_dsv);
+    device_context->OMSetRenderTargets(1, &offscreen_buffer_rtv, depth_buffer_dsv);
 
     D3D11_VIEWPORT viewport = {};
     viewport.Width    = (float)platform_window_width;
@@ -248,6 +308,21 @@ void render_frame(Vector4 clear_color) {
         }
     }
 
+    float resolve_clear_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    device_context->ClearRenderTargetView(back_buffer_rtv, resolve_clear_color);
+    device_context->OMSetRenderTargets(1, &back_buffer_rtv, NULL);
+
+    device_context->RSSetState(quad_rasterizer_state);
+    device_context->OMSetDepthStencilState(quad_depth_stencil_state, 0);
+    device_context->VSSetShader(shader_resolve.vertex_shader, NULL, 0);
+    device_context->PSSetShader(shader_resolve.pixel_shader,  NULL, 0);
+    device_context->IASetInputLayout(quad_input_layout);
+    UINT offset = 0;
+    device_context->IASetVertexBuffers(0, 1, &fullscreen_quad_vb.buffer, &fullscreen_quad_vb.stride, &offset);
+    device_context->IASetIndexBuffer(fullscreen_quad_ib.buffer, DXGI_FORMAT_R32_UINT, 0);
+    device_context->PSSetShaderResources(0, 1, &offscreen_buffer_srv);
+    device_context->DrawIndexed(6, 0, 0);
+    
     num_render_commands = 0;
 }
 
@@ -441,7 +516,47 @@ bool load_shader(Shader *shader, String _filename, Render_Vertex_Type vertex_typ
 
             shader->input_layout = mesh_vertex_input_layout;
         } break;
+
+        case RENDER_VERTEX_TYPE_QUAD: {
+            if (!quad_input_layout) {
+                D3D11_INPUT_ELEMENT_DESC ieds[3] = {};
+                
+                ieds[0].SemanticName      = "POSITION";
+                ieds[0].Format            = DXGI_FORMAT_R32G32_FLOAT;
+                ieds[0].AlignedByteOffset = offsetof(Quad_Vertex, position);
+                ieds[0].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
+
+                ieds[1].SemanticName      = "COLOR";
+                ieds[1].Format            = DXGI_FORMAT_R32G32B32A32_FLOAT;
+                ieds[1].AlignedByteOffset = offsetof(Quad_Vertex, color);
+                ieds[1].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
+                
+                ieds[2].SemanticName      = "TEXCOORD";
+                ieds[2].Format            = DXGI_FORMAT_R32G32_FLOAT;
+                ieds[2].AlignedByteOffset = offsetof(Quad_Vertex, uv);
+                ieds[2].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
+
+                if (device->CreateInputLayout(ieds, ArrayCount(ieds), vertex_data, vertex_data_size, &quad_input_layout) != S_OK) {
+                    logprintf("Failed to create quad vertex input layout with shader '%s'\n", vertex_full_path);
+                    return false;
+                }
+            }
+
+            shader->input_layout = quad_input_layout;
+        } break;
     }
 
     return true;
+}
+
+void imgui_init_dx11() {
+    ImGui_ImplDX11_Init(device, device_context);
+}
+
+void imgui_begin_frame_dx11() {
+     ImGui_ImplDX11_NewFrame();
+}
+
+void imgui_end_frame_dx11() {
+    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
