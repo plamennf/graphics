@@ -94,10 +94,11 @@ int main(int argc, char *argv[]) {
             }
             accumulated_dt -= fixed_update_dt;
         }
-
+        
         draw_one_frame();
         
-        render_frame_and_present(v4(0.2f, 0.5f, 0.8f, 1.0f));
+        render_frame(v4(0.2f, 0.5f, 0.8f, 1.0f));
+        swap_buffers();
     }
     
     return 0;

@@ -48,7 +48,8 @@ struct Texture : public Texture_Platform_Specific {
 
 void init_renderer(bool vsync);
 void resize_renderer();
-void render_frame_and_present(Vector4 clear_color);
+void render_frame(Vector4 clear_color);
+void swap_buffers();
 
 bool create_gpu_buffer(Gpu_Buffer *buffer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data, bool is_dynamic);
 bool create_texture(Texture *texture, int width, int height, Texture_Format format, u8 *initial_data);

@@ -10,6 +10,8 @@
 
 #define SafeRelease(ptr) if (ptr) { ptr->Release(); ptr = NULL; }
 
+static bool should_vsync;
+
 extern Shader shader_basic;
 
 extern bool init_shaders();
@@ -73,6 +75,11 @@ static void release_back_buffer() {
 }
 
 void init_renderer(bool vsync) {
+    should_vsync = vsync;
+    if (!should_vsync) {
+        swap_chain_flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+    }
+    
     DXGI_SWAP_CHAIN_DESC swap_chain_desc = {};
     swap_chain_desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     swap_chain_desc.SampleDesc.Count  = 1;
@@ -81,6 +88,7 @@ void init_renderer(bool vsync) {
     swap_chain_desc.OutputWindow      = (HWND)platform_window_get_native();
     swap_chain_desc.Windowed          = TRUE;
     swap_chain_desc.SwapEffect        = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swap_chain_desc.Flags             = swap_chain_flags;
 
     D3D_FEATURE_LEVEL feature_levels[] = { D3D_FEATURE_LEVEL_11_0 };
 
@@ -169,7 +177,7 @@ void resize_renderer() {
     init_back_buffer();
 }
 
-void render_frame_and_present(Vector4 clear_color) {
+void render_frame(Vector4 clear_color) {
     device_context->ClearRenderTargetView(back_buffer_rtv, &clear_color.x);
     device_context->ClearDepthStencilView(depth_buffer_dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
     device_context->OMSetRenderTargets(1, &back_buffer_rtv, depth_buffer_dsv);
@@ -239,10 +247,16 @@ void render_frame_and_present(Vector4 clear_color) {
             } break;
         }
     }
-    
-    swap_chain->Present(1, 0);
 
     num_render_commands = 0;
+}
+
+void swap_buffers() {    
+    if (should_vsync) {
+        swap_chain->Present(1, 0);
+    } else {
+        swap_chain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
+    }
 }
 
 static u32 d3d11_bind_flags(Gpu_Buffer_Type type) {
