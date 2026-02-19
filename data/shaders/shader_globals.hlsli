@@ -5,9 +5,11 @@ cbuffer Per_Scene_Uniforms : register(b0) {
 
 cbuffer Per_Object_Uniforms : register(b1) {
     float4x4 world_matrix;
+}
+
+cbuffer Per_Subobject_Uniforms : register(b2) {
     float4 material_diffuse_color;
     float material_shininess;
-    float is_the_cube;
 }
 
 struct Mesh_Vertex_Input {

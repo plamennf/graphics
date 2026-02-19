@@ -23,7 +23,6 @@ struct Material {
     
     Vector4 diffuse_color;
     float shininess;
-    float is_the_cube = 0.0f;
 };
 
 struct Submesh {

@@ -1,16 +1,19 @@
 #include "pch.h"
 #include "renderer.h"
-#include "renderer_internal.h"
 #include "mesh.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+Command_Buffer immediate_cb;
+
 Shader shader_basic;
 Shader shader_resolve;
 
-Render_Command *render_commands = NULL;
-int num_render_commands = 0;
+Texture back_buffer;
+
+Texture offscreen_render_target;
+Texture offscreen_depth_target;
 
 bool init_shaders() {
 #define LOAD_SHADER(name, type) if (!load_shader(&shader_##name, #name, type)) return false;
@@ -61,20 +64,18 @@ bool generate_gpu_data_for_mesh(Mesh *mesh) {
     return true;
 }
 
-void set_per_scene_uniforms(Per_Scene_Uniforms uniforms) {
-    uniforms.projection_matrix = transpose(uniforms.projection_matrix);
-    uniforms.view_matrix       = transpose(uniforms.view_matrix);
-    add_per_scene_uniforms(&uniforms);
-}
-
-void render_mesh(Mesh *mesh, Vector3 position, Vector3 rotation, Vector3 scale, Vector4 color) {
+void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotation, Vector3 scale, Vector4 color) {
     Matrix4 world_matrix = make_transformation_matrix(position, rotation, scale);
     world_matrix = transpose(world_matrix);
+
+    Per_Object_Uniforms uniforms;
+    uniforms.world_matrix = world_matrix;
+    set_per_object_uniforms(cb, &uniforms);
     
     for (int i = 0; i < mesh->num_submeshes; i++) {
         Submesh *submesh = &mesh->submeshes[i];
         
-        Render_Mesh_Info info;
+        Render_Item_Info info;
 
         info.vertex_buffer = &submesh->vertex_buffer;
         info.index_buffer  = &submesh->index_buffer;
@@ -82,14 +83,12 @@ void render_mesh(Mesh *mesh, Vector3 position, Vector3 rotation, Vector3 scale, 
 
         info.diffuse_texture = submesh->material.diffuse_texture;
         
-        info.uniforms.world_matrix    = world_matrix;
         info.uniforms.diffuse_color.x = submesh->material.diffuse_color.x * color.x;
         info.uniforms.diffuse_color.y = submesh->material.diffuse_color.y * color.y;
         info.uniforms.diffuse_color.z = submesh->material.diffuse_color.z * color.z;
         info.uniforms.diffuse_color.w = submesh->material.diffuse_color.w * color.w;
         info.uniforms.shininess       = submesh->material.shininess;
-        info.uniforms.is_the_cube     = submesh->material.is_the_cube;
         
-        add_render_mesh_info(&info);
+        render_item(cb, &info);
     }
 }

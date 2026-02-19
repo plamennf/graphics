@@ -15,6 +15,8 @@ static Mesh *mesh;
 static Mesh *cube;
 static Camera camera;
 
+static Command_Buffer cb;
+
 static void imgui_init() {
     float main_scale = platform_imgui_get_scale();
     
@@ -65,18 +67,27 @@ static void imgui_end_frame() {
 
 static void draw_one_frame() {
     ZoneScopedN("Set up render commands");
+
+    clear_render_target(&cb, &offscreen_render_target, v4(0.2f, 0.5f, 0.8f, 1.0f));
+    clear_depth_target(&cb, &offscreen_depth_target, 1.0f, 0);
+    set_render_targets(&cb, 1, &offscreen_render_target, &offscreen_depth_target);
+    set_viewport(&cb, platform_window_width, platform_window_height);
+
+    set_pipeline_type(&cb, RENDER_PIPELINE_MESH);
     
     Per_Scene_Uniforms per_scene_uniforms;
-    per_scene_uniforms.projection_matrix = make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 2000.0f);
-    per_scene_uniforms.view_matrix = get_view_matrix(&camera);
-    set_per_scene_uniforms(per_scene_uniforms);
+    per_scene_uniforms.projection_matrix = transpose(make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 2000.0f));
+    per_scene_uniforms.view_matrix = transpose(get_view_matrix(&camera));
+    set_per_scene_uniforms(&cb, &per_scene_uniforms);
 
 #ifdef DO_SPONZA
-    render_mesh(mesh, v3(0, 0, 0), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+    render_mesh(&cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
 #else
-    render_mesh(cube, v3(-200, -3, -200), v3(0, 0, 0), v3(400, 1, 400), v4(1, 1, 1, 1));
-    render_mesh(mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+    render_mesh(&cb, cube, v3(-200, -3, -200), v3(0, 0, 0), v3(400, 1, 400), v4(1, 1, 1, 1));
+    render_mesh(&cb, mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
 #endif
+
+    resolve_render_targets(&cb, &offscreen_render_target, &back_buffer);
 }
 
 static void draw_imgui_stuff(float dt) {
@@ -109,6 +120,8 @@ int main(int argc, char *argv[]) {
     if (!platform_window_create(0, 0, "Sandbox")) return false;
     init_renderer(false);
     imgui_init();
+
+    if (!init_command_buffer(&cb)) return false;
     
     globals.texture_registry = new Texture_Registry();
     globals.mesh_registry    = new Mesh_Registry();
@@ -122,7 +135,6 @@ int main(int argc, char *argv[]) {
 
     cube = globals.mesh_registry->find_or_load("Cube");
     if (!cube) return 1;
-    cube->submeshes[0].material.is_the_cube = 1.0f;
 #endif
 
     platform_window_toggle_fullscreen();
@@ -190,8 +202,10 @@ int main(int argc, char *argv[]) {
             
             draw_one_frame();
         
-            render_frame(v4(0.2f, 0.5f, 0.8f, 1.0f));
+            render_frame(1, &cb);
 
+            set_render_targets(&immediate_cb, 1, &back_buffer, NULL);
+            
             imgui_begin_frame();
             draw_imgui_stuff(dt);
             imgui_end_frame();

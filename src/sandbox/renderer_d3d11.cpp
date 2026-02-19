@@ -1,7 +1,6 @@
 #include "pch.h"
 #include "renderer.h"
 #include "mesh.h"
-#include "renderer_internal.h"
 
 #include <d3d11.h>
 #include <dxgi1_6.h>
@@ -29,21 +28,13 @@ static ID3D11DeviceContext *device_context;
 static IDXGISwapChain *swap_chain;
 static u32 swap_chain_flags;
 
-static ID3D11Texture2D *back_buffer_texture = NULL;
-static ID3D11RenderTargetView *back_buffer_rtv = NULL;
-
-static ID3D11Texture2D *offscreen_buffer_texture = NULL;
-static ID3D11RenderTargetView *offscreen_buffer_rtv = NULL;
-static ID3D11ShaderResourceView *offscreen_buffer_srv = NULL;
-
-static ID3D11Texture2D *depth_buffer_texture = NULL;
-static ID3D11DepthStencilView *depth_buffer_dsv = NULL;
-
 static ID3D11SamplerState *sampler_point  = NULL;
 static ID3D11SamplerState *sampler_linear = NULL;
 
+/*
 static Gpu_Buffer per_scene_cb;
 static Gpu_Buffer per_object_cb;
+*/
 
 static Gpu_Buffer fullscreen_quad_vb;
 static Gpu_Buffer fullscreen_quad_ib;
@@ -56,12 +47,12 @@ static ID3D11RasterizerState *rasterizer_state_for_mesh_rendering = NULL;
 static ID3D11DepthStencilState *depth_stencil_state_for_mesh_rendering = NULL;
 
 static void init_back_buffer() {
-    swap_chain->GetBuffer(0, IID_PPV_ARGS(&back_buffer_texture));
+    swap_chain->GetBuffer(0, IID_PPV_ARGS(&back_buffer.texture));
 
     D3D11_RENDER_TARGET_VIEW_DESC rtv_desc = {};
     rtv_desc.Format        = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
     rtv_desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-    device->CreateRenderTargetView(back_buffer_texture, &rtv_desc, &back_buffer_rtv);
+    device->CreateRenderTargetView(back_buffer.texture, &rtv_desc, &back_buffer.rtv);
 
     D3D11_TEXTURE2D_DESC texture_desc = {};
     texture_desc.Width              = platform_window_width;
@@ -73,38 +64,38 @@ static void init_back_buffer() {
     texture_desc.SampleDesc.Quality = 0;
     texture_desc.Usage              = D3D11_USAGE_DEFAULT;
     texture_desc.BindFlags          = D3D11_BIND_DEPTH_STENCIL;
-    device->CreateTexture2D(&texture_desc, NULL, &depth_buffer_texture);
+    device->CreateTexture2D(&texture_desc, NULL, &offscreen_depth_target.texture);
 
     D3D11_DEPTH_STENCIL_VIEW_DESC dsv_desc = {};
     dsv_desc.Format        = texture_desc.Format;
     dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-    device->CreateDepthStencilView(depth_buffer_texture, &dsv_desc, &depth_buffer_dsv);
+    device->CreateDepthStencilView(offscreen_depth_target.texture, &dsv_desc, &offscreen_depth_target.dsv);
 
     texture_desc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     texture_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    device->CreateTexture2D(&texture_desc, NULL, &offscreen_buffer_texture);
+    device->CreateTexture2D(&texture_desc, NULL, &offscreen_render_target.texture);
 
     rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-    device->CreateRenderTargetView(offscreen_buffer_texture, &rtv_desc, &offscreen_buffer_rtv);
+    device->CreateRenderTargetView(offscreen_render_target.texture, &rtv_desc, &offscreen_render_target.rtv);
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
     srv_desc.Format                    = texture_desc.Format;
     srv_desc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
     srv_desc.Texture2D.MostDetailedMip = 0;
     srv_desc.Texture2D.MipLevels       = 1;
-    device->CreateShaderResourceView(offscreen_buffer_texture, &srv_desc, &offscreen_buffer_srv);
+    device->CreateShaderResourceView(offscreen_render_target.texture, &srv_desc, &offscreen_render_target.srv);
 }
 
 static void release_back_buffer() {
-    SafeRelease(depth_buffer_dsv);
-    SafeRelease(depth_buffer_texture);
+    SafeRelease(offscreen_depth_target.dsv);
+    SafeRelease(offscreen_depth_target.texture);
 
-    SafeRelease(offscreen_buffer_srv);
-    SafeRelease(offscreen_buffer_rtv);
-    SafeRelease(offscreen_buffer_texture);
+    SafeRelease(offscreen_render_target.srv);
+    SafeRelease(offscreen_render_target.rtv);
+    SafeRelease(offscreen_render_target.texture);
     
-    SafeRelease(back_buffer_rtv);
-    SafeRelease(back_buffer_texture);
+    SafeRelease(back_buffer.rtv);
+    SafeRelease(back_buffer.texture);
 }
 
 void init_renderer(bool vsync) {
@@ -134,7 +125,7 @@ void init_renderer(bool vsync) {
     
     D3D_FEATURE_LEVEL feature_levels[] = { D3D_FEATURE_LEVEL_11_0 };
 
-    UINT create_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED;
+    UINT create_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 #ifdef BUILD_DEBUG
     create_flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
@@ -145,14 +136,13 @@ void init_renderer(bool vsync) {
     Assert(device);
     Assert(device_context);
 
+    immediate_cb.context = device_context;
+
     init_back_buffer();
 
     if (!init_shaders()) {
         exit(1);
     }
-
-    render_commands     = new Render_Command[MAX_RENDER_COMMANDS];
-    num_render_commands = 0;
 
     //
     // Create fullscreen quad resources
@@ -197,14 +187,6 @@ void init_renderer(bool vsync) {
         sampler_desc.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         device->CreateSamplerState(&sampler_desc, &sampler_linear);
     }
-
-    //
-    // Create constant buffers
-    //
-    {
-        create_gpu_buffer(&per_scene_cb, GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Scene_Uniforms), 0, NULL, true);
-        create_gpu_buffer(&per_object_cb, GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Object_Uniforms), 0, NULL, true);
-    }
     
     //
     // Create rasterizer states
@@ -247,95 +229,15 @@ void resize_renderer() {
     init_back_buffer();
 }
 
-void render_frame(Vector4 clear_color) {
+void render_frame(int num_command_buffers, Command_Buffer *cbs) {
     ZoneScopedN("Render frame internal");
     
-    device_context->ClearRenderTargetView(offscreen_buffer_rtv, &clear_color.x);
-    device_context->ClearDepthStencilView(depth_buffer_dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
-    device_context->OMSetRenderTargets(1, &offscreen_buffer_rtv, depth_buffer_dsv);
-
-    D3D11_VIEWPORT viewport = {};
-    viewport.Width    = (float)platform_window_width;
-    viewport.Height   = (float)platform_window_height;
-    viewport.MaxDepth = 1.0f;
-    device_context->RSSetViewports(1, &viewport);
-
-    ID3D11SamplerState *samplers[] = { sampler_point, sampler_linear };
-    device_context->PSSetSamplers(0, ArrayCount(samplers), samplers);
-
-    ID3D11Buffer *cbs[] = { per_scene_cb.buffer, per_object_cb.buffer };
-    device_context->VSSetConstantBuffers(0, ArrayCount(cbs), cbs);
-    device_context->PSSetConstantBuffers(0, ArrayCount(cbs), cbs);
-
-    device_context->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-    // TODO: Change this to an enum
-    int render_pass = -1; // 0 - mesh rendering
-
-    for (int i = 0; i < num_render_commands; i++) {
-        Render_Command *command = &render_commands[i];
-        
-        switch (command->type) {
-            case RENDER_COMMAND_SET_PER_SCENE_UNIFORMS: {
-                Per_Scene_Uniforms *uniforms = &command->per_scene_uniforms;
-
-                D3D11_MAPPED_SUBRESOURCE msr;
-                device_context->Map(per_scene_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);
-                memcpy(msr.pData, uniforms, sizeof(*uniforms));
-                device_context->Unmap(per_scene_cb.buffer, 0);
-            } break;
-
-            case RENDER_COMMAND_RENDER_MESH: {
-                if (render_pass != 0) {
-                    device_context->RSSetState(rasterizer_state_for_mesh_rendering);
-                    device_context->OMSetDepthStencilState(depth_stencil_state_for_mesh_rendering, 0);
-                    device_context->VSSetShader(shader_basic.vertex_shader, NULL, 0);
-                    device_context->PSSetShader(shader_basic.pixel_shader,  NULL, 0);
-                    device_context->IASetInputLayout(mesh_vertex_input_layout);
-                    
-                    render_pass = 0;
-                }
-                
-                Render_Mesh_Info *info = &command->render_mesh_info;
-
-                D3D11_MAPPED_SUBRESOURCE msr;
-                device_context->Map(per_object_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);
-                memcpy(msr.pData, &info->uniforms, sizeof(Per_Object_Uniforms));
-                device_context->Unmap(per_object_cb.buffer, 0);
-                
-                Assert(info->vertex_buffer);
-                ID3D11Buffer *vertex_buffer = info->vertex_buffer->buffer;
-                UINT offset = 0;
-                device_context->IASetVertexBuffers(0, 1, &vertex_buffer, &info->vertex_buffer->stride, &offset);
-
-                Assert(info->index_buffer);
-                ID3D11Buffer *index_buffer = info->index_buffer->buffer;
-                device_context->IASetIndexBuffer(index_buffer, DXGI_FORMAT_R32_UINT, 0);
-
-                Assert(info->diffuse_texture);
-                device_context->PSSetShaderResources(0, 1, &info->diffuse_texture->srv);
-
-                device_context->DrawIndexed(info->num_indices, 0, 0);
-            } break;
-        }
+    for (int i = 0; i < num_command_buffers; i++) {
+        ID3D11CommandList *command_list;
+        cbs[i].context->FinishCommandList(FALSE, &command_list);
+        device_context->ExecuteCommandList(command_list, FALSE);
+        SafeRelease(command_list);
     }
-
-    float resolve_clear_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
-    device_context->ClearRenderTargetView(back_buffer_rtv, resolve_clear_color);
-    device_context->OMSetRenderTargets(1, &back_buffer_rtv, NULL);
-
-    device_context->RSSetState(quad_rasterizer_state);
-    device_context->OMSetDepthStencilState(quad_depth_stencil_state, 0);
-    device_context->VSSetShader(shader_resolve.vertex_shader, NULL, 0);
-    device_context->PSSetShader(shader_resolve.pixel_shader,  NULL, 0);
-    device_context->IASetInputLayout(quad_input_layout);
-    UINT offset = 0;
-    device_context->IASetVertexBuffers(0, 1, &fullscreen_quad_vb.buffer, &fullscreen_quad_vb.stride, &offset);
-    device_context->IASetIndexBuffer(fullscreen_quad_ib.buffer, DXGI_FORMAT_R32_UINT, 0);
-    device_context->PSSetShaderResources(0, 1, &offscreen_buffer_srv);
-    device_context->DrawIndexed(6, 0, 0);
-    
-    num_render_commands = 0;
 }
 
 void swap_buffers() {    
@@ -571,4 +473,137 @@ void imgui_begin_frame_dx11() {
 
 void imgui_end_frame_dx11() {
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
+bool init_command_buffer(Command_Buffer *cb) {
+    device->CreateDeferredContext(0, &cb->context);
+
+    if (!create_gpu_buffer(&cb->per_scene_cb,     GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Scene_Uniforms), 0, NULL, true)) return false;
+    if (!create_gpu_buffer(&cb->per_object_cb,    GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Object_Uniforms), 0, NULL, true)) return false;
+    if (!create_gpu_buffer(&cb->per_subobject_cb, GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Subobject_Uniforms), 0, NULL, true)) return false;
+    
+    return true;
+}
+
+void set_render_targets(Command_Buffer *cb, int num_render_targets, Texture *render_targets, Texture *depth_target) {
+    Assert(cb);
+    
+    const int MAX_RENDER_TARGETS = 4;
+    Assert(num_render_targets < MAX_RENDER_TARGETS);
+    
+    ID3D11RenderTargetView *rtvs[MAX_RENDER_TARGETS];
+    for (int i = 0; i < num_render_targets; i++) {
+        rtvs[i] = render_targets[i].rtv;
+    }
+    
+    cb->context->OMSetRenderTargets(num_render_targets, num_render_targets > 0 ? rtvs : NULL, depth_target ? depth_target->dsv : NULL);
+}
+
+void clear_render_target(Command_Buffer *cb, Texture *render_target, Vector4 clear_color) {
+    Assert(cb);
+    Assert(render_target);
+
+    cb->context->ClearRenderTargetView(render_target->rtv, &clear_color.x);
+}
+
+void set_viewport(Command_Buffer *cb, int width, int height) {
+    Assert(cb);
+    
+    D3D11_VIEWPORT viewport = {};
+    viewport.Width    = (float)width;
+    viewport.Height   = (float)height;
+    viewport.MaxDepth = 1.0f;
+    cb->context->RSSetViewports(1, &viewport);
+}
+
+void clear_depth_target(Command_Buffer *cb, Texture *depth_target, float z, u8 stencil) {
+    Assert(cb);
+    Assert(depth_target);
+
+    // TODO: Store whether the depth_target has a format with stencil and set the clear flags accordingly.
+    UINT clear_flags = D3D11_CLEAR_DEPTH;
+    cb->context->ClearDepthStencilView(depth_target->dsv, clear_flags, 1.0f, 0);
+}
+
+void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type) {
+    switch (type) {
+        case RENDER_PIPELINE_MESH: {
+            cb->context->RSSetState(rasterizer_state_for_mesh_rendering);
+            cb->context->OMSetDepthStencilState(depth_stencil_state_for_mesh_rendering, 0);
+            cb->context->VSSetShader(shader_basic.vertex_shader, NULL, 0);
+            cb->context->PSSetShader(shader_basic.pixel_shader,  NULL, 0);
+            cb->context->IASetInputLayout(mesh_vertex_input_layout);
+        } break;
+
+        case RENDER_PIPELINE_QUAD: {
+            cb->context->RSSetState(quad_rasterizer_state);
+            cb->context->OMSetDepthStencilState(quad_depth_stencil_state, 0);
+            cb->context->VSSetShader(shader_resolve.vertex_shader, NULL, 0);
+            cb->context->PSSetShader(shader_resolve.pixel_shader,  NULL, 0);
+            cb->context->IASetInputLayout(quad_input_layout);
+        } break;
+    }
+
+    ID3D11Buffer *cbs[] = { cb->per_scene_cb.buffer, cb->per_object_cb.buffer, cb->per_subobject_cb.buffer };
+    cb->context->VSSetConstantBuffers(0, ArrayCount(cbs), cbs);
+    cb->context->PSSetConstantBuffers(0, ArrayCount(cbs), cbs);
+    
+    ID3D11SamplerState *samplers[] = { sampler_point, sampler_linear };
+    cb->context->PSSetSamplers(0, ArrayCount(samplers), samplers);
+
+    cb->context->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+}
+
+void set_per_scene_uniforms(Command_Buffer *cb, Per_Scene_Uniforms *uniforms) {
+    D3D11_MAPPED_SUBRESOURCE msr;
+    cb->context->Map(cb->per_scene_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);
+    memcpy(msr.pData, uniforms, sizeof(*uniforms));
+    cb->context->Unmap(cb->per_scene_cb.buffer, 0);
+}
+
+void set_per_object_uniforms(Command_Buffer *cb, Per_Object_Uniforms *uniforms) {
+    D3D11_MAPPED_SUBRESOURCE msr;
+    cb->context->Map(cb->per_object_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);
+    memcpy(msr.pData, uniforms, sizeof(*uniforms));
+    cb->context->Unmap(cb->per_object_cb.buffer, 0);
+}
+
+void resolve_render_targets(Command_Buffer *cb, Texture *source, Texture *destination) {
+    clear_render_target(cb, destination, v4(0.0f, 0.0f, 0.0f, 1.0f));
+    set_render_targets(cb, 1, destination, NULL);
+    
+    set_pipeline_type(cb, RENDER_PIPELINE_QUAD);
+    set_texture(cb, TEXTURE_DIFFUSE, source);
+
+    UINT offset = 0;
+    cb->context->IASetVertexBuffers(0, 1, &fullscreen_quad_vb.buffer, &fullscreen_quad_vb.stride, &offset);
+    cb->context->IASetIndexBuffer(fullscreen_quad_ib.buffer, DXGI_FORMAT_R32_UINT, 0);
+
+    cb->context->DrawIndexed(6, 0, 0);
+}
+
+void render_item(Command_Buffer *cb, Render_Item_Info *info) {
+    Assert(info->vertex_buffer);
+    Assert(info->index_buffer);
+    Assert(info->diffuse_texture);
+    
+    UINT offset = 0;
+    cb->context->IASetVertexBuffers(0, 1, &info->vertex_buffer->buffer, &info->vertex_buffer->stride, &offset);
+    cb->context->IASetIndexBuffer(info->index_buffer->buffer, DXGI_FORMAT_R32_UINT, 0);
+
+    set_texture(cb, TEXTURE_DIFFUSE, info->diffuse_texture);
+
+    D3D11_MAPPED_SUBRESOURCE msr;
+    cb->context->Map(cb->per_subobject_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);
+    memcpy(msr.pData, &info->uniforms, sizeof(info->uniforms));
+    cb->context->Unmap(cb->per_subobject_cb.buffer, 0);
+    
+    cb->context->DrawIndexed(info->num_indices, 0, 0);
+}
+
+void set_texture(Command_Buffer *cb, Texture_Type type, Texture *texture) {
+    Assert(texture);
+    Assert(texture->srv);
+    
+    cb->context->PSSetShaderResources((int)type, 1, &texture->srv);
 }

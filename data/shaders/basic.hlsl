@@ -15,10 +15,6 @@ Vertex_Output vertex_main(Mesh_Vertex_Input input) {
 }
 
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
-    float2 uv = input.uv;
-    if (is_the_cube) {
-        uv = input.uv * 80.0;
-    }
-    float4 diffuse_color = diffuse_texture.Sample(sampler_linear, uv);
+    float4 diffuse_color = diffuse_texture.Sample(sampler_linear, input.uv);
     return diffuse_color * material_diffuse_color;
 }
