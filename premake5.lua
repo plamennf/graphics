@@ -73,6 +73,7 @@ project "sandbox"
     includedirs {
         "%{wks.location}/src",
         "%{wks.location}/external/include",
+        "%{wks.location}/tracy",
     }
 
     libdirs {
@@ -86,7 +87,7 @@ project "sandbox"
     files {
         "src/sandbox/**.h",
         "src/sandbox/**.cpp",
-        "extenral/src/imgui/**.cpp",
+        "tracy/TracyClient.cpp",
     }
 
     defines {
@@ -96,6 +97,9 @@ project "sandbox"
 
     filter "files:external/src/imgui/**.cpp"
 	    enablepch "off"
+
+    filter "files:tracy/TracyClient.cpp"
+        enablepch "off"
 
     filter "system:windows"
 		systemversion "latest"
@@ -110,7 +114,7 @@ project "sandbox"
         }
 
     filter "configurations:Debug"
-		defines "BUILD_DEBUG"
+		defines { "BUILD_DEBUG", "TRACY_ENABLE" }
 		runtime "Debug"
 		symbols "on"
 
@@ -119,7 +123,7 @@ project "sandbox"
         }
 
 	filter "configurations:Release"
-		defines "BUILD_RELEASE"
+		defines { "BUILD_RELEASE", "TRACY_ENABLE" }
 		runtime "Release"
 		optimize "on"
 

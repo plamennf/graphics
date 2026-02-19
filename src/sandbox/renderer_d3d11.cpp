@@ -238,6 +238,8 @@ void resize_renderer() {
 }
 
 void render_frame(Vector4 clear_color) {
+    ZoneScopedN("Render frame internal");
+    
     device_context->ClearRenderTargetView(offscreen_buffer_rtv, &clear_color.x);
     device_context->ClearDepthStencilView(depth_buffer_dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
     device_context->OMSetRenderTargets(1, &offscreen_buffer_rtv, depth_buffer_dsv);

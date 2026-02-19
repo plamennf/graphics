@@ -40,6 +40,8 @@ static void imgui_init() {
 }
 
 static void imgui_begin_frame() {
+    ZoneScopedN("ImGui Begin Frame");
+    
 #ifdef RENDER_D3D11
     extern void imgui_begin_frame_dx11();
     imgui_begin_frame_dx11();
@@ -51,6 +53,8 @@ static void imgui_begin_frame() {
 }
 
 static void imgui_end_frame() {
+    ZoneScopedN("ImGui End Frame");
+    
     ImGui::Render();
 
 #ifdef RENDER_D3D11
@@ -60,6 +64,8 @@ static void imgui_end_frame() {
 }
 
 static void draw_one_frame() {
+    ZoneScopedN("Set up render commands");
+    
     Per_Scene_Uniforms per_scene_uniforms;
     per_scene_uniforms.projection_matrix = make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 2000.0f);
     per_scene_uniforms.view_matrix = get_view_matrix(&camera);
@@ -74,6 +80,8 @@ static void draw_one_frame() {
 }
 
 static void draw_imgui_stuff(float dt) {
+    ZoneScopedN("Draw ImGui Stuff");
+    
     static float current_dt = 1.0f;
     static int frame_counter = 0;
 
@@ -127,6 +135,8 @@ int main(int argc, char *argv[]) {
     u64 last_time = platform_get_time_in_nanoseconds();
     float accumulated_dt = 0.0f;
     while (platform_window_is_open) {
+        ZoneScopedN("One frame");
+        
         reset_temporary_storage();
 
         u64 now_time = platform_get_time_in_nanoseconds();
@@ -174,16 +184,25 @@ int main(int argc, char *argv[]) {
             }
             accumulated_dt -= fixed_update_dt;
         }
-        
-        draw_one_frame();
-        
-        render_frame(v4(0.2f, 0.5f, 0.8f, 1.0f));
 
-        imgui_begin_frame();
-        draw_imgui_stuff(dt);
-        imgui_end_frame();
+        {
+            ZoneScopedN("Render one whole frame");
+            
+            draw_one_frame();
         
-        swap_buffers();
+            render_frame(v4(0.2f, 0.5f, 0.8f, 1.0f));
+
+            imgui_begin_frame();
+            draw_imgui_stuff(dt);
+            imgui_end_frame();
+        }
+
+        {
+            ZoneScopedN("Swap buffers");
+            swap_buffers();
+        }
+
+        FrameMark;
     }
     
     return 0;
