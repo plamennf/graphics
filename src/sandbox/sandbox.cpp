@@ -106,6 +106,54 @@ static void draw_imgui_stuff(float dt) {
     ImGui::Text("FPS: %d", (int)(1.0f / current_dt));
     ImGui::Text("Frame time: %.2fms", current_dt * 1000.0f);
     ImGui::End();
+
+    ImGui::Begin("Sponza");
+    ImGui::BeginGroup();
+    if (ImGui::TreeNode("Submeshes"))
+    {
+        for (int i = 0; i < mesh->num_submeshes; ++i) {
+            Submesh *submesh   = &mesh->submeshes[i];
+            Material *material = &submesh->material;
+
+            ImGui::PushID(i);
+
+            char tree_node_name[64];
+            snprintf(tree_node_name, sizeof(tree_node_name), "Submesh %d", i);
+            if (ImGui::TreeNode(tree_node_name)) {
+                ImGui::Text("Vertices: %d", submesh->num_vertices);
+                ImGui::Text("Indices: %d", submesh->num_indices);
+
+                ImGui::Separator();
+                ImGui::Text("Material");
+
+                // Texture names
+                ImGui::Text("Albedo: %s", 
+                            material->albedo_texture_name ? material->albedo_texture_name : "None");
+
+                ImGui::Text("Normal: %s", 
+                            material->normal_texture_name ? material->normal_texture_name : "None");
+
+                ImGui::Text("Metallic/Roughness: %s", 
+                            material->metallic_roughness_texture_name ? material->metallic_roughness_texture_name : "None");
+
+                ImGui::Text("AO: %s", 
+                            material->ao_texture_name ? material->ao_texture_name : "None");
+
+                ImGui::Separator();
+
+                ImGui::ColorEdit4("Diffuse Color", (float *)&material->diffuse_color);
+                ImGui::SliderFloat("Shininess", &material->shininess, 1.0f, 256.0f);
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
+        }
+
+        ImGui::TreePop();
+    }
+    ImGui::EndGroup();
+    ImGui::End();
 }
 
 int main(int argc, char *argv[]) {
@@ -126,6 +174,10 @@ int main(int argc, char *argv[]) {
     globals.texture_registry = new Texture_Registry();
     globals.mesh_registry    = new Mesh_Registry();
 
+    globals.white_texture = new Texture();
+    u8 white_texture_data[4] = { 255, 255, 255, 255 };
+    if (!create_texture(globals.white_texture, 1, 1, TEXTURE_FORMAT_RGBA8, white_texture_data)) return 1;
+    
 #ifdef DO_SPONZA
     mesh = globals.mesh_registry->find_or_load("Sponza");
     if (!mesh) return 1;

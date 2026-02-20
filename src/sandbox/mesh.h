@@ -23,17 +23,17 @@ struct Material {
     char *normal_texture_name;
     */
 
-    char *albedo_texture_name;
-    Texture *albedo_texture;
+    char *albedo_texture_name = NULL;
+    Texture *albedo_texture = NULL;
 
-    char *normal_texture_name;
-    Texture *normal_texture;
+    char *normal_texture_name = NULL;
+    Texture *normal_texture = NULL;
 
-    char *metallic_roughness_texture_name;
+    char *metallic_roughness_texture_name = NULL;
     Texture *metallic_roughness_texture;
 
-    char *ao_texture_name;
-    Texture *ao_texture;
+    char *ao_texture_name = NULL;
+    Texture *ao_texture = NULL;
     
     Vector4 diffuse_color;
     float shininess;
@@ -55,9 +55,6 @@ struct Submesh {
 struct Mesh {
     int num_submeshes;
     Submesh *submeshes;
-
-    int num_lights;
-    Light *lights;
 };
 
 bool load_mesh(Mesh *mesh, String filepath);

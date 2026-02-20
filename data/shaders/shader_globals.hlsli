@@ -30,3 +30,6 @@ SamplerState sampler_point  : register(s0);
 SamplerState sampler_linear : register(s1);
 
 Texture2D albedo_texture : register(t0);
+Texture2D normal_texture : register(t1);
+Texture2D metallic_roughness_texture : register(t2);
+Texture2D ao_texture : register(t3);

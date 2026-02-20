@@ -7,8 +7,10 @@
 struct Global_Variables {
     float mouse_sensitivity = 0.2f;
 
-    Texture_Registry *texture_registry;
-    Mesh_Registry    *mesh_registry;
+    Texture_Registry *texture_registry = NULL;
+    Mesh_Registry    *mesh_registry = NULL;
+
+    Texture *white_texture = NULL;
 };
 
 extern Global_Variables globals;

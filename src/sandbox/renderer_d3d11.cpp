@@ -592,6 +592,9 @@ void render_item(Command_Buffer *cb, Render_Item_Info *info) {
     cb->context->IASetIndexBuffer(info->index_buffer->buffer, DXGI_FORMAT_R32_UINT, 0);
 
     set_texture(cb, TEXTURE_ALBEDO, info->albedo_texture);
+    set_texture(cb, TEXTURE_NORMAL, info->normal_texture);
+    set_texture(cb, TEXTURE_METALLIC_ROUGHNESS, info->metallic_roughness_texture);
+    set_texture(cb, TEXTURE_AO,                 info->ao_texture);
 
     D3D11_MAPPED_SUBRESOURCE msr;
     cb->context->Map(cb->per_subobject_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);

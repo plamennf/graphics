@@ -58,7 +58,25 @@ bool generate_gpu_data_for_mesh(Mesh *mesh) {
 
         if (!create_gpu_buffer(&submesh->index_buffer, GPU_BUFFER_TYPE_INDEX, submesh->num_indices * sizeof(u32), 0, submesh->indices, false)) return false;
 
-        submesh->material.albedo_texture = globals.texture_registry->find_or_load(submesh->material.albedo_texture_name);
+        submesh->material.albedo_texture = globals.white_texture;
+        if (submesh->material.albedo_texture_name) {
+            submesh->material.albedo_texture = globals.texture_registry->find_or_load(submesh->material.albedo_texture_name);
+        }
+
+        submesh->material.normal_texture = globals.white_texture;
+        if (submesh->material.normal_texture_name) {
+            submesh->material.normal_texture = globals.texture_registry->find_or_load(submesh->material.normal_texture_name);
+        }
+
+        submesh->material.metallic_roughness_texture = globals.white_texture;
+        if (submesh->material.metallic_roughness_texture_name) {
+            submesh->material.metallic_roughness_texture = globals.texture_registry->find_or_load(submesh->material.metallic_roughness_texture_name);
+        }
+
+        submesh->material.ao_texture = globals.white_texture;
+        if (submesh->material.ao_texture_name) {
+            submesh->material.ao_texture = globals.texture_registry->find_or_load(submesh->material.ao_texture_name);
+        }
     }
 
     return true;
@@ -82,6 +100,9 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
         info.num_indices   = submesh->num_indices;
 
         info.albedo_texture = submesh->material.albedo_texture;
+        info.normal_texture = submesh->material.normal_texture;
+        info.metallic_roughness_texture = submesh->material.metallic_roughness_texture;
+        info.ao_texture                 = submesh->material.ao_texture;
         
         info.uniforms.diffuse_color.x = submesh->material.diffuse_color.x * color.x;
         info.uniforms.diffuse_color.y = submesh->material.diffuse_color.y * color.y;

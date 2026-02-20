@@ -85,6 +85,9 @@ struct Render_Item_Info {
     int num_indices;
 
     Texture *albedo_texture;
+    Texture *normal_texture;
+    Texture *metallic_roughness_texture;
+    Texture *ao_texture;
     
     Per_Subobject_Uniforms uniforms;
 };
@@ -96,6 +99,9 @@ enum Render_Pipeline_Type {
 
 enum Texture_Type {
     TEXTURE_ALBEDO,
+    TEXTURE_NORMAL,
+    TEXTURE_METALLIC_ROUGHNESS,
+    TEXTURE_AO,
 };
 
 struct Command_Buffer : public Command_Buffer_Platform_Specific {

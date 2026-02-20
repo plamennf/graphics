@@ -159,125 +159,20 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                     submesh->material.albedo_texture_name = get_texture_name(texture);
                 }
 
-#if 0
-                if (material->pbr_specular_glossiness.diffuse_texture.texture && submesh->material.diffuse_texture_name == NULL) {
-                    cgltf_texture *texture = material->pbr_specular_glossiness.diffuse_texture.texture;
-                    if (texture->image) {
-                        char *texture_path_orig = NULL;
-                        if (texture->image->uri) {
-                            texture_path_orig = texture->image->uri;
-                        } else if (texture->image->name) {
-                            texture_path_orig = texture->image->name;
-                        }
-
-                        if (texture_path_orig) {
-                            char *texture_name_orig = copy_string(texture_path_orig);
-                            defer { delete [] texture_name_orig; };
-                            
-                            char *texture_name = strrchr(texture_name_orig, '/');
-                            if (texture_name) {
-                                texture_name++;
-                            } else {
-                                texture_name = texture_name_orig;
-                            }
-
-                            char *texture_name_end = strrchr(texture_name, '.');
-                            if (texture_name_end) {
-                                texture_name[texture_name_end - texture_name] = 0;
-                            }
-
-                            submesh->material.diffuse_texture_name = copy_string(texture_name);
-                        } else {
-                            submesh->material.diffuse_texture_name = NULL;
-                        }
-                    }
-                } else {
-                    //submesh->material.diffuse_texture = globals.white_texture;
-                }
-                
-                if (material->specular.specular_texture.texture) {
-                    cgltf_texture *texture = material->specular.specular_texture.texture;
-                    if (texture->image) {
-                        char *texture_path_orig = NULL;
-                        if (texture->image->uri) {
-                            texture_path_orig = texture->image->uri;
-                        } else if (texture->image->name) {
-                            texture_path_orig = texture->image->name;
-                        }
-
-                        if (texture_path_orig) {
-                            char *texture_name_orig = copy_string(texture_path_orig);
-                            defer { delete [] texture_name_orig; };
-                            
-                            char *texture_name = strrchr(texture_name_orig, '/');
-                            if (texture_name) {
-                                texture_name++;
-                            } else {
-                                texture_name = texture_name_orig;
-                            }
-
-                            char *texture_name_end = strrchr(texture_name, '.');
-                            if (texture_name_end) {
-                                texture_name[texture_name_end - texture_name] = 0;
-                            }
-
-                            submesh->material.specular_texture_name = copy_string(texture_name);
-                        } else {
-                            submesh->material.specular_texture_name = NULL;
-                        }
-                    }
-                } else {
-                    submesh->material.specular_texture_name = NULL;
-                }
-
                 if (material->normal_texture.texture) {
                     cgltf_texture *texture = material->normal_texture.texture;
-                    if (texture->image) {
-                        char *texture_path_orig = NULL;
-                        if (texture->image->uri) {
-                            texture_path_orig = texture->image->uri;
-                        } else if (texture->image->name) {
-                            texture_path_orig = texture->image->name;
-                        }
-
-                        if (texture_path_orig) {
-                            char *texture_name_orig = copy_string(texture_path_orig);
-                            defer { delete [] texture_name_orig; };
-                            
-                            char *texture_name = strrchr(texture_name_orig, '/');
-                            if (texture_name) {
-                                texture_name++;
-                            } else {
-                                texture_name = texture_name_orig;
-                            }
-
-                            char *texture_name_end = strrchr(texture_name, '.');
-                            if (texture_name_end) {
-                                texture_name[texture_name_end - texture_name] = 0;
-                            }
-
-                            submesh->material.normal_texture_name = copy_string(texture_name);
-                        } else {
-                            submesh->material.normal_texture_name = NULL;
-                        }
-                    }
-                } else {
-                    submesh->material.normal_texture_name = NULL;
+                    submesh->material.normal_texture_name = get_texture_name(texture);
                 }
 
-                Vector4 gltf_base_color_factor;
-                memcpy(&gltf_base_color_factor.x, material->pbr_metallic_roughness.base_color_factor, 4 * sizeof(float));
-                if (length(gltf_base_color_factor) > 1e-6) {
-                    submesh->material.diffuse_color = gltf_base_color_factor;
-                } else {
-                    submesh->material.diffuse_color = v4(1, 1, 1, 1);
+                if (material->pbr_metallic_roughness.metallic_roughness_texture.texture) {
+                    cgltf_texture *texture = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
+                    submesh->material.metallic_roughness_texture_name = get_texture_name(texture);
                 }
-                
-                float r = material->pbr_metallic_roughness.roughness_factor;
-                submesh->material.shininess = 2.0f/(r*r) - 2.0f;
-                clamp(&submesh->material.shininess, 1.0f, 256.0f);
 
-#endif
+                if (material->occlusion_texture.texture) {
+                    cgltf_texture *texture = material->occlusion_texture.texture;
+                    submesh->material.ao_texture_name = get_texture_name(texture);
+                }
             }
         }
     }
