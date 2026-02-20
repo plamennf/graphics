@@ -46,7 +46,7 @@ project "corelib"
 		defines "BUILD_DEBUG"
 		runtime "Debug"
 		symbols "on"
-
+        
 	filter "configurations:Release"
 		defines "BUILD_RELEASE"
 		runtime "Release"

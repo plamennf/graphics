@@ -561,6 +561,10 @@ void platform_imgui_init() {
     ImGui_ImplWin32_Init(g_hwnd);
 }
 
+void platform_imgui_shutdown() {
+    ImGui_ImplWin32_Shutdown();
+}
+
 void platform_imgui_begin_frame() {
     ImGui_ImplWin32_NewFrame();
 }

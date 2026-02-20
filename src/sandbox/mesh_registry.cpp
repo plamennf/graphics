@@ -9,6 +9,7 @@
 static bool file_exists(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (!file) return false;
+    fclose(file);
     return true;
 }
 
@@ -67,4 +68,18 @@ Mesh *Mesh_Registry::find_or_load(String _name) {
     mesh_lookup.add((char *)name, mesh);
 
     return mesh;
+}
+
+Mesh_Registry::~Mesh_Registry() {
+    for (int i = 0; i < mesh_lookup.allocated; i++) {
+        if (!mesh_lookup.occupancy_mask[i]) continue;
+
+        Mesh *mesh = mesh_lookup.buckets[i].value;
+        for (int j = 0; j < mesh->num_submeshes; j++) {
+            Submesh *submesh = &mesh->submeshes[j];
+            
+            release_gpu_buffer(&submesh->vertex_buffer);
+            release_gpu_buffer(&submesh->index_buffer);
+        }
+    }
 }

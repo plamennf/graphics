@@ -82,32 +82,32 @@ static void draw_one_frame() {
     per_scene_uniforms.camera_position = camera.position;
 
     Light l0 = {};
-l0.type = LIGHT_TYPE_POINT;
-l0.position = { 0.0f, 32.0f, 0.0f };
-l0.color = { 1.0f, 0.85f, 0.7f };
-l0.intensity = 600.0f;
-l0.range = 60.0f;
+    l0.type = LIGHT_TYPE_POINT;
+    l0.position = { 0.0f, 32.0f, 0.0f };
+    l0.color = { 1.0f, 0.85f, 0.7f };
+    l0.intensity = 600.0f;
+    l0.range = 60.0f;
 
     Light l1 = {};
-l1.type = LIGHT_TYPE_POINT;
-l1.position = { -30.0f, 15.0f, 0.0f };
-l1.color = { 0.4f, 0.6f, 1.0f };
-l1.intensity = 400.0f;
-l1.range = 45.0f;
+    l1.type = LIGHT_TYPE_POINT;
+    l1.position = { -30.0f, 15.0f, 0.0f };
+    l1.color = { 0.4f, 0.6f, 1.0f };
+    l1.intensity = 400.0f;
+    l1.range = 45.0f;
 
     Light l2 = {};
-l2.type = LIGHT_TYPE_POINT;
-l2.position = { 30.0f, 12.0f, -10.0f };
-l2.color = { 1.0f, 1.0f, 1.0f };
-l2.intensity = 700.0f;
-l2.range = 40.0f;
+    l2.type = LIGHT_TYPE_POINT;
+    l2.position = { 30.0f, 12.0f, -10.0f };
+    l2.color = { 1.0f, 1.0f, 1.0f };
+    l2.intensity = 700.0f;
+    l2.range = 40.0f;
 
     Light l3 = {};
-l3.type = LIGHT_TYPE_POINT;
-l3.position = { 0.0f, 10.0f, -25.0f };
-l3.color = { 1.0f, 0.95f, 0.8f };
-l3.intensity = 250.0f;
-l3.range = 50.0f;
+    l3.type = LIGHT_TYPE_POINT;
+    l3.position = { 0.0f, 10.0f, -25.0f };
+    l3.color = { 1.0f, 0.95f, 0.8f };
+    l3.intensity = 250.0f;
+    l3.range = 50.0f;
 
     per_scene_uniforms.lights[0] = l0;
     per_scene_uniforms.lights[1] = l1;
@@ -125,6 +125,8 @@ l3.range = 50.0f;
 #endif
 
     resolve_render_targets(&cb, &offscreen_render_target, &back_buffer);
+
+    set_texture(&cb, TEXTURE_ALBEDO, NULL);
 }
 
 static void draw_imgui_stuff(float dt) {
@@ -216,12 +218,13 @@ int main(int argc, char *argv[]) {
 
     if (!init_command_buffer(&cb)) return false;
     
-    globals.texture_registry = new Texture_Registry();
+    globals.texture_registry = new Texture_Registry();    
     globals.mesh_registry    = new Mesh_Registry();
-
+    
     globals.white_texture = new Texture();
     u8 white_texture_data[4] = { 255, 255, 255, 255 };
     if (!create_texture(globals.white_texture, 1, 1, TEXTURE_FORMAT_RGBA8, white_texture_data)) return 1;
+    defer { release_texture(globals.white_texture); };
     
 #ifdef DO_SPONZA
     mesh = globals.mesh_registry->find_or_load("Sponza");
@@ -247,7 +250,7 @@ int main(int argc, char *argv[]) {
         ZoneScopedN("One frame");
         
         reset_temporary_storage();
-
+        
         u64 now_time = platform_get_time_in_nanoseconds();
         u64 dt_ns = now_time - last_time;
         last_time = now_time;
@@ -321,6 +324,14 @@ int main(int argc, char *argv[]) {
 
         FrameMark;
     }
+
+#ifdef RENDER_D3D11
+    extern void imgui_shutdown_dx11();
+    imgui_shutdown_dx11();
+#endif
+    
+    platform_imgui_shutdown();
+    ImGui::DestroyContext();
     
     return 0;
 }

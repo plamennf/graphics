@@ -126,11 +126,14 @@ extern Texture offscreen_render_target;
 extern Texture offscreen_depth_target;
 
 void init_renderer(bool vsync);
+void shutdown_renderer();
+
 void resize_renderer();
 void render_frame(int num_command_buffers, Command_Buffer *cbs);
 void swap_buffers();
 
 bool init_command_buffer(Command_Buffer *cb);
+void release_command_buffer(Command_Buffer *cb);
 
 void set_render_targets(Command_Buffer *cb, int num_render_targets, Texture *render_targets, Texture *depth_target);
 void clear_render_target(Command_Buffer *cb, Texture *render_target, Vector4 clear_color);
@@ -144,8 +147,11 @@ void render_item(Command_Buffer *cb, Render_Item_Info *info);
 void set_texture(Command_Buffer *cb, Texture_Type type, Texture *texture);
 
 bool create_gpu_buffer(Gpu_Buffer *buffer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data, bool is_dynamic);
+void release_gpu_buffer(Gpu_Buffer *buffer);
 bool create_texture(Texture *texture, int width, int height, Texture_Format format, u8 *initial_data);
+void release_texture(Texture *texture);
 bool load_shader(Shader *shader, String filename, Render_Vertex_Type vertex_type);
+void release_shader(Shader *shader);
 
 // API agnostic rendering functions
 bool load_texture(Texture *texture, String filepath);

@@ -7,6 +7,7 @@
 static bool file_exists(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (!file) return false;
+    fclose(file);
     return true;
 }
 
@@ -44,4 +45,13 @@ Texture *Texture_Registry::find_or_load(String _name) {
     texture_lookup.add((char *)name, texture);
 
     return texture;
+}
+
+Texture_Registry::~Texture_Registry() {
+    for (int i = 0; i < texture_lookup.allocated; i++) {
+        if (!texture_lookup.occupancy_mask[i]) continue;
+
+        Texture *texture = texture_lookup.buckets[i].value;
+        release_texture(texture);
+    }
 }

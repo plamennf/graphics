@@ -87,15 +87,9 @@ static void init_back_buffer() {
 }
 
 static void release_back_buffer() {
-    SafeRelease(offscreen_depth_target.dsv);
-    SafeRelease(offscreen_depth_target.texture);
-
-    SafeRelease(offscreen_render_target.srv);
-    SafeRelease(offscreen_render_target.rtv);
-    SafeRelease(offscreen_render_target.texture);
-    
-    SafeRelease(back_buffer.rtv);
-    SafeRelease(back_buffer.texture);
+    release_texture(&offscreen_depth_target);
+    release_texture(&offscreen_render_target);
+    release_texture(&back_buffer);
 }
 
 void init_renderer(bool vsync) {
@@ -223,6 +217,30 @@ void init_renderer(bool vsync) {
     }
 }
 
+void shutdown_renderer() {
+    SafeRelease(depth_stencil_state_for_mesh_rendering);
+    SafeRelease(rasterizer_state_for_mesh_rendering);
+    SafeRelease(mesh_vertex_input_layout);
+    
+    release_gpu_buffer(&fullscreen_quad_vb);
+    release_gpu_buffer(&fullscreen_quad_ib);
+    SafeRelease(quad_input_layout);
+    SafeRelease(quad_rasterizer_state);
+    SafeRelease(quad_depth_stencil_state);
+    
+    SafeRelease(sampler_point);
+    SafeRelease(sampler_linear);
+    
+    release_shader(&shader_resolve);
+    release_shader(&shader_basic);
+    
+    release_back_buffer();
+    
+    SafeRelease(swap_chain);
+    SafeRelease(device_context);    
+    SafeRelease(device);
+}
+
 void resize_renderer() {
     release_back_buffer();
     swap_chain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, swap_chain_flags);
@@ -233,14 +251,16 @@ void render_frame(int num_command_buffers, Command_Buffer *cbs) {
     ZoneScopedN("Render frame internal");
     
     for (int i = 0; i < num_command_buffers; i++) {
+        if (cbs[i].context == device_context) continue;
+        
         ID3D11CommandList *command_list;
-        cbs[i].context->FinishCommandList(FALSE, &command_list);
+        cbs[i].context->FinishCommandList(TRUE, &command_list);
         device_context->ExecuteCommandList(command_list, FALSE);
         SafeRelease(command_list);
     }
 }
 
-void swap_buffers() {    
+void swap_buffers() {
     if (should_vsync) {
         swap_chain->Present(1, 0);
     } else {
@@ -280,6 +300,10 @@ bool create_gpu_buffer(Gpu_Buffer *buffer, Gpu_Buffer_Type type, u32 size, u32 s
     buffer->is_dynamic = is_dynamic;
     
     return true;
+}
+
+void release_gpu_buffer(Gpu_Buffer *buffer) {
+    SafeRelease(buffer->buffer);
 }
 
 static DXGI_FORMAT dxgi_format(Texture_Format format) {
@@ -346,6 +370,13 @@ bool create_texture(Texture *texture, int width, int height, Texture_Format form
     return true;
 }
 
+void release_texture(Texture *texture) {
+    SafeRelease(texture->rtv);
+    SafeRelease(texture->dsv);
+    SafeRelease(texture->srv);
+    SafeRelease(texture->texture);
+}
+
 static char *read_entire_binary_file(const char *filepath, s64 *length_pointer) {
     FILE *file = fopen(filepath, "rb");
     if (!file) {
@@ -374,6 +405,7 @@ bool load_shader(Shader *shader, String _filename, Render_Vertex_Type vertex_typ
     s64 vertex_data_size;
     char *vertex_data = read_entire_binary_file(vertex_full_path, &vertex_data_size);
     if (!vertex_data) return false;
+    defer { delete [] vertex_data; };
 
     if (device->CreateVertexShader(vertex_data, vertex_data_size, NULL, &shader->vertex_shader) != S_OK) {
         logprintf("Failed to create '%s' vertex shader\n", vertex_full_path);
@@ -386,7 +418,8 @@ bool load_shader(Shader *shader, String _filename, Render_Vertex_Type vertex_typ
     s64 pixel_data_size;
     char *pixel_data = read_entire_binary_file(pixel_full_path, &pixel_data_size);
     if (!pixel_data) return false;
-
+    defer { delete [] pixel_data; };
+    
     if (device->CreatePixelShader(pixel_data, pixel_data_size, NULL, &shader->pixel_shader) != S_OK) {
         logprintf("Failed to create '%s' pixel shader\n", pixel_full_path);
         return false;
@@ -463,6 +496,11 @@ bool load_shader(Shader *shader, String _filename, Render_Vertex_Type vertex_typ
     return true;
 }
 
+void release_shader(Shader *shader) {
+    SafeRelease(shader->pixel_shader);
+    SafeRelease(shader->vertex_shader);
+}
+
 void imgui_init_dx11() {
     ImGui_ImplDX11_Init(device, device_context);
 }
@@ -475,14 +513,27 @@ void imgui_end_frame_dx11() {
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
+void imgui_shutdown_dx11() {
+    ImGui_ImplDX11_Shutdown();
+}
+
 bool init_command_buffer(Command_Buffer *cb) {
-    device->CreateDeferredContext(0, &cb->context);
+    //device->CreateDeferredContext(0, &cb->context);
+    cb->context = device_context;
 
     if (!create_gpu_buffer(&cb->per_scene_cb,     GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Scene_Uniforms), 0, NULL, true)) return false;
     if (!create_gpu_buffer(&cb->per_object_cb,    GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Object_Uniforms), 0, NULL, true)) return false;
     if (!create_gpu_buffer(&cb->per_subobject_cb, GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Subobject_Uniforms), 0, NULL, true)) return false;
     
     return true;
+}
+
+void release_command_buffer(Command_Buffer *cb) {
+    release_gpu_buffer(&cb->per_subobject_cb);
+    release_gpu_buffer(&cb->per_object_cb);
+    release_gpu_buffer(&cb->per_scene_cb);
+
+    SafeRelease(cb->context);
 }
 
 void set_render_targets(Command_Buffer *cb, int num_render_targets, Texture *render_targets, Texture *depth_target) {
@@ -605,8 +656,10 @@ void render_item(Command_Buffer *cb, Render_Item_Info *info) {
 }
 
 void set_texture(Command_Buffer *cb, Texture_Type type, Texture *texture) {
-    Assert(texture);
-    Assert(texture->srv);
-    
-    cb->context->PSSetShaderResources((int)type, 1, &texture->srv);
+    if (texture) {
+        cb->context->PSSetShaderResources((int)type, 1, &texture->srv);
+    } else {
+        ID3D11ShaderResourceView *null_srv[1] = { NULL };
+        cb->context->PSSetShaderResources((int)type, 1, null_srv);
+    }
 }

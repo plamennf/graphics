@@ -19,5 +19,6 @@ void platform_show_and_unlock_cursor();
 void platform_hide_and_lock_cursor();
 
 void platform_imgui_init();
+void platform_imgui_shutdown();
 void platform_imgui_begin_frame();
 float platform_imgui_get_scale();
