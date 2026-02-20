@@ -1,6 +1,29 @@
+static const int MAX_LIGHTS = 4;
+
+static const float PI = 3.14159265359;
+
+static const int LIGHT_TYPE_UNKNOWN = 0;
+static const int LIGHT_TYPE_DIRECTIONAL = 1;
+static const int LIGHT_TYPE_POINT = 2;
+static const int LIGHT_TYPE_SPOT = 3;
+
+struct Light {
+    int type;
+    float3 position;
+    float3 color;
+    float intensity;
+    float range;
+    float spot_inner_cone_angle;
+    float spot_outer_cone_angle;
+};
+
 cbuffer Per_Scene_Uniforms : register(b0) {
     float4x4 projection_matrix;
     float4x4 view_matrix;
+
+    Light lights[MAX_LIGHTS];
+
+    float3 camera_position;
 };
 
 cbuffer Per_Object_Uniforms : register(b1) {

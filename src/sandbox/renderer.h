@@ -8,6 +8,8 @@
 
 struct Mesh;
 
+const int MAX_LIGHTS = 4;
+
 enum Light_Type {
     LIGHT_TYPE_UNKNOWN,
     LIGHT_TYPE_DIRECTIONAL,
@@ -17,11 +19,13 @@ enum Light_Type {
 
 struct Light {
     Light_Type type;
+    Vector3 position;
     Vector3 color;
     float intensity;
     float range;
     float spot_inner_cone_angle;
     float spot_outer_cone_angle;
+    float padding;
 };
 
 struct Quad_Vertex {
@@ -33,6 +37,9 @@ struct Quad_Vertex {
 struct Per_Scene_Uniforms {
     Matrix4 projection_matrix;
     Matrix4 view_matrix;
+    Light lights[MAX_LIGHTS];
+    Vector3 camera_position;
+    float padding;
 };
 
 enum Render_Vertex_Type {

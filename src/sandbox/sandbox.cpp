@@ -78,10 +78,47 @@ static void draw_one_frame() {
     Per_Scene_Uniforms per_scene_uniforms;
     per_scene_uniforms.projection_matrix = transpose(make_perspective((float)platform_window_width / (float)platform_window_height, 90.0f, 0.1f, 2000.0f));
     per_scene_uniforms.view_matrix = transpose(get_view_matrix(&camera));
+
+    per_scene_uniforms.camera_position = camera.position;
+
+    Light center_light = {};
+    center_light.type = LIGHT_TYPE_POINT;
+    center_light.position = { 0.0f, 12.0f, 0.0f };
+    center_light.color = { 1.0f, 0.85f, 0.7f };
+    center_light.intensity = 120.0f;
+    center_light.range = 25.0f;
+
+    Light blue_light = {};
+    blue_light.type = LIGHT_TYPE_POINT;
+    blue_light.position = { -10.0f, 8.0f, 5.0f };
+    blue_light.color = { 0.4f, 0.6f, 1.0f };   // cool blue
+    blue_light.intensity = 90.0f;
+    blue_light.range = 18.0f;
+
+    Light strong_light = {};
+    strong_light.type = LIGHT_TYPE_POINT;
+    strong_light.position = { 8.0f, 6.0f, -5.0f };
+    strong_light.color = { 1.0f, 1.0f, 1.0f };
+    strong_light.intensity = 250.0f;
+    strong_light.range = 15.0f;
+
+    Light fill_light = {};
+    fill_light.type = LIGHT_TYPE_POINT;
+    fill_light.position = { 0.0f, 5.0f, -12.0f };
+    fill_light.color = { 1.0f, 0.95f, 0.8f };
+    fill_light.intensity = 40.0f;
+    fill_light.range = 30.0f;
+
+    per_scene_uniforms.lights[0] = center_light;
+    per_scene_uniforms.lights[1] = blue_light;
+    per_scene_uniforms.lights[2] = strong_light;
+    per_scene_uniforms.lights[3] = fill_light;
+    
     set_per_scene_uniforms(&cb, &per_scene_uniforms);
 
 #ifdef DO_SPONZA
-    render_mesh(&cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
+    float scale = 0.025f;
+    render_mesh(&cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
 #else
     render_mesh(&cb, cube, v3(-200, -3, -200), v3(0, 0, 0), v3(400, 1, 400), v4(1, 1, 1, 1));
     render_mesh(&cb, mesh, v3(0, -2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
@@ -153,6 +190,14 @@ static void draw_imgui_stuff(float dt) {
         ImGui::TreePop();
     }
     ImGui::EndGroup();
+    ImGui::End();
+
+    ImGui::Begin("Camera");
+    ImGui::SliderFloat("Movement speed", &camera.movement_speed, 0.1f, 30.0f);
+    ImGui::SliderFloat("Shift movement multiplier", &camera.shift_movement_multiplier, 1.0f, 5.0f);
+    ImGui::SliderFloat("Max jump velocity", &camera.max_jump_velocity, 0.1f, 2.0f);
+    ImGui::SliderFloat("Gravity", &camera.gravity, 1.0f, 10.0f);
+    ImGui::SliderFloat("Head y", &camera.head_y, 0.0f, 10.0f);
     ImGui::End();
 }
 
@@ -227,6 +272,10 @@ int main(int argc, char *argv[]) {
         if (is_key_pressed(KEY_ESCAPE)) {
             should_show_cursor = !should_show_cursor;
         }
+
+        if (is_key_pressed(KEY_U)) {
+            globals.enable_imgui = !globals.enable_imgui;
+        }
         
         if (should_show_cursor) {
             platform_show_and_unlock_cursor();
@@ -258,9 +307,11 @@ int main(int argc, char *argv[]) {
 
             set_render_targets(&immediate_cb, 1, &back_buffer, NULL);
             
-            imgui_begin_frame();
-            draw_imgui_stuff(dt);
-            imgui_end_frame();
+            if (globals.enable_imgui) {
+                imgui_begin_frame();
+                draw_imgui_stuff(dt);
+                imgui_end_frame();
+            }
         }
 
         {

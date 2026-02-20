@@ -1,14 +1,6 @@
 #include "pch.h"
 #include "camera.h"
 
-const float MOVEMENT_SPEED           = 300.0f;
-const float SHIFT_MOVEMENT_MULTIPLER = 1.5f;
-
-const float JUMP_VELOCITY = 10.0f;
-const float GRAVITY       = 9.81f;
-
-const float HEAD_Y        = 50.0f;
-
 void init_camera(Camera *camera, Vector3 position, float pitch, float yaw, float roll) {
     camera->position = position;
     camera->target   = position - v3(0, 0, 1);
@@ -33,9 +25,9 @@ void update_camera_fps(Camera *camera, float dt) {
 
     float old_y = camera->position.y;
 
-    float movement_speed = MOVEMENT_SPEED;
+    float movement_speed = camera->movement_speed;
     if (is_key_down(KEY_SHIFT)) {
-        movement_speed *= SHIFT_MOVEMENT_MULTIPLER;
+        movement_speed *= camera->shift_movement_multiplier;
     }
 
     Vector3 world_up = v3(0, 1, 0);
@@ -73,17 +65,17 @@ void update_camera_fps(Camera *camera, float dt) {
 void fixed_update_camera_fps(Camera *camera, float dt) {
     if (is_key_down(KEY_SPACE)) {
         if (camera->is_on_ground) {
-            camera->jump_velocity = JUMP_VELOCITY;
+            camera->jump_velocity = camera->max_jump_velocity;
             camera->is_on_ground  = false;
         }
     }
 
-    camera->jump_velocity -= GRAVITY * dt;
+    camera->jump_velocity -= camera->gravity * dt;
 
     camera->position.y += camera->jump_velocity;
     
-    if (camera->position.y < HEAD_Y) {
-        camera->position.y = HEAD_Y;
+    if (camera->position.y < camera->head_y) {
+        camera->position.y = camera->head_y;
         camera->is_on_ground = true;
     }
 }
@@ -100,9 +92,9 @@ void update_camera_noclip(Camera *camera, float dt) {
         camera->pitch = -89.0f;
     }
 
-    float movement_speed = MOVEMENT_SPEED;
+    float movement_speed = camera->movement_speed;
     if (is_key_down(KEY_SHIFT)) {
-        movement_speed *= SHIFT_MOVEMENT_MULTIPLER;
+        movement_speed *= camera->shift_movement_multiplier;
     }
 
     Vector3 world_up = v3(0, 1, 0);

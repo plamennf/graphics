@@ -11,6 +11,8 @@ struct Global_Variables {
     Mesh_Registry    *mesh_registry = NULL;
 
     Texture *white_texture = NULL;
+
+    bool enable_imgui = true;
 };
 
 extern Global_Variables globals;

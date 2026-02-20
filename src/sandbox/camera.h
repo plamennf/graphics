@@ -16,6 +16,12 @@ struct Camera {
 
     float jump_velocity;
     bool is_on_ground;
+
+    float movement_speed            = 10.0f;
+    float shift_movement_multiplier = 1.5f;
+    float max_jump_velocity         = 0.5f;
+    float gravity                   = 1.0f;
+    float head_y                    = 2.0f;
 };
 
 void init_camera(Camera *camera, Vector3 position, float pitch, float yaw, float roll);
