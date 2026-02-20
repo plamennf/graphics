@@ -15,6 +15,6 @@ Vertex_Output vertex_main(Mesh_Vertex_Input input) {
 }
 
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
-    float4 diffuse_color = diffuse_texture.Sample(sampler_linear, input.uv);
-    return diffuse_color * material_diffuse_color;
+    float4 albedo_color = albedo_texture.Sample(sampler_linear, input.uv);
+    return albedo_color;// * material_diffuse_color;
 }

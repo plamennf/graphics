@@ -573,7 +573,7 @@ void resolve_render_targets(Command_Buffer *cb, Texture *source, Texture *destin
     set_render_targets(cb, 1, destination, NULL);
     
     set_pipeline_type(cb, RENDER_PIPELINE_QUAD);
-    set_texture(cb, TEXTURE_DIFFUSE, source);
+    set_texture(cb, TEXTURE_ALBEDO, source);
 
     UINT offset = 0;
     cb->context->IASetVertexBuffers(0, 1, &fullscreen_quad_vb.buffer, &fullscreen_quad_vb.stride, &offset);
@@ -585,13 +585,13 @@ void resolve_render_targets(Command_Buffer *cb, Texture *source, Texture *destin
 void render_item(Command_Buffer *cb, Render_Item_Info *info) {
     Assert(info->vertex_buffer);
     Assert(info->index_buffer);
-    Assert(info->diffuse_texture);
+    Assert(info->albedo_texture);
     
     UINT offset = 0;
     cb->context->IASetVertexBuffers(0, 1, &info->vertex_buffer->buffer, &info->vertex_buffer->stride, &offset);
     cb->context->IASetIndexBuffer(info->index_buffer->buffer, DXGI_FORMAT_R32_UINT, 0);
 
-    set_texture(cb, TEXTURE_DIFFUSE, info->diffuse_texture);
+    set_texture(cb, TEXTURE_ALBEDO, info->albedo_texture);
 
     D3D11_MAPPED_SUBRESOURCE msr;
     cb->context->Map(cb->per_subobject_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);

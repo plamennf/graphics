@@ -58,7 +58,7 @@ bool generate_gpu_data_for_mesh(Mesh *mesh) {
 
         if (!create_gpu_buffer(&submesh->index_buffer, GPU_BUFFER_TYPE_INDEX, submesh->num_indices * sizeof(u32), 0, submesh->indices, false)) return false;
 
-        submesh->material.diffuse_texture = globals.texture_registry->find_or_load(submesh->material.diffuse_texture_name);
+        submesh->material.albedo_texture = globals.texture_registry->find_or_load(submesh->material.albedo_texture_name);
     }
 
     return true;
@@ -81,7 +81,7 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
         info.index_buffer  = &submesh->index_buffer;
         info.num_indices   = submesh->num_indices;
 
-        info.diffuse_texture = submesh->material.diffuse_texture;
+        info.albedo_texture = submesh->material.albedo_texture;
         
         info.uniforms.diffuse_color.x = submesh->material.diffuse_color.x * color.x;
         info.uniforms.diffuse_color.y = submesh->material.diffuse_color.y * color.y;

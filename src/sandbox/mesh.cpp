@@ -9,6 +9,40 @@
 
 //#define SAVE_GLTF_MESHES_TO_CUSTOM_FORMAT
 
+static char *get_texture_name(cgltf_texture *texture) {
+    if (texture->image) {
+        char *texture_path_orig = NULL;
+        if (texture->image->uri) {
+            texture_path_orig = texture->image->uri;
+        } else if (texture->image->name) {
+            texture_path_orig = texture->image->name;
+        }
+
+        if (texture_path_orig) {
+            char *texture_name_orig = copy_string(texture_path_orig);
+            defer { delete [] texture_name_orig; };
+                            
+            char *texture_name = strrchr(texture_name_orig, '/');
+            if (texture_name) {
+                texture_name++;
+            } else {
+                texture_name = texture_name_orig;
+            }
+
+            char *texture_name_end = strrchr(texture_name, '.');
+            if (texture_name_end) {
+                texture_name[texture_name_end - texture_name] = 0;
+            }
+
+            return copy_string(texture_name);
+        } else {
+            return NULL;
+        }
+    }
+
+    return NULL;
+}
+
 bool load_mesh_gltf(Mesh *mesh, String _filepath) {
     const char *filepath = temp_c_string(_filepath);
     
@@ -122,39 +156,10 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
 
                 if (material->pbr_metallic_roughness.base_color_texture.texture) {
                     cgltf_texture *texture = material->pbr_metallic_roughness.base_color_texture.texture;
-                    if (texture->image) {
-                        char *texture_path_orig = NULL;
-                        if (texture->image->uri) {
-                            texture_path_orig = texture->image->uri;
-                        } else if (texture->image->name) {
-                            texture_path_orig = texture->image->name;
-                        }
-
-                        if (texture_path_orig) {
-                            char *texture_name_orig = copy_string(texture_path_orig);
-                            defer { delete [] texture_name_orig; };
-                            
-                            char *texture_name = strrchr(texture_name_orig, '/');
-                            if (texture_name) {
-                                texture_name++;
-                            } else {
-                                texture_name = texture_name_orig;
-                            }
-
-                            char *texture_name_end = strrchr(texture_name, '.');
-                            if (texture_name_end) {
-                                texture_name[texture_name_end - texture_name] = 0;
-                            }
-
-                            submesh->material.diffuse_texture_name = copy_string(texture_name);
-                        } else {
-                            submesh->material.diffuse_texture_name = NULL;
-                        }
-                    }
-                } else {
-                    submesh->material.diffuse_texture_name = NULL;
+                    submesh->material.albedo_texture_name = get_texture_name(texture);
                 }
 
+#if 0
                 if (material->pbr_specular_glossiness.diffuse_texture.texture && submesh->material.diffuse_texture_name == NULL) {
                     cgltf_texture *texture = material->pbr_specular_glossiness.diffuse_texture.texture;
                     if (texture->image) {
@@ -189,7 +194,7 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                 } else {
                     //submesh->material.diffuse_texture = globals.white_texture;
                 }
-
+                
                 if (material->specular.specular_texture.texture) {
                     cgltf_texture *texture = material->specular.specular_texture.texture;
                     if (texture->image) {
@@ -271,6 +276,8 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                 float r = material->pbr_metallic_roughness.roughness_factor;
                 submesh->material.shininess = 2.0f/(r*r) - 2.0f;
                 clamp(&submesh->material.shininess, 1.0f, 256.0f);
+
+#endif
             }
         }
     }
@@ -281,7 +288,6 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
     if (extension) {
         base_filepath[extension - base_filepath] = 0;
     }
-
     
 #ifdef SAVE_GLTF_MESHES_TO_CUSTOM_FORMAT
     char new_filepath[4096];
@@ -321,6 +327,7 @@ bool save_mesh(Mesh *mesh, String _filepath) {
         fwrite(&submesh->num_indices, sizeof(int), 1, file);
         fwrite(submesh->indices, sizeof(u32), submesh->num_indices, file);
 
+#if 0
         if (submesh->material.diffuse_texture_name) {
             save_binary_string(file, submesh->material.diffuse_texture_name);
         } else {
@@ -338,7 +345,8 @@ bool save_mesh(Mesh *mesh, String _filepath) {
         } else {
             save_binary_string(file, "-");
         }
-
+#endif
+        
         fwrite(&submesh->material.diffuse_color.x, sizeof(float), 4, file);
         fwrite(&submesh->material.shininess, sizeof(float), 1, file);
     }
@@ -386,7 +394,8 @@ bool load_mesh_custom(Mesh *mesh, String _filepath) {
         submesh->vertex_buffer = make_gpu_buffer(GPU_BUFFER_VERTEX, submesh->num_vertices * sizeof(Mesh_Vertex), submesh->vertices, false);
         submesh->index_buffer = make_gpu_buffer(GPU_BUFFER_INDEX, submesh->num_indices * sizeof(u32), submesh->indices, false);
         */
-        
+
+#if 0
         int diffuse_texture_filepath_len = 0;
         fread(&diffuse_texture_filepath_len, sizeof(int), 1, file);
         char *diffuse_texture_filepath = new char[diffuse_texture_filepath_len + 1];
@@ -425,6 +434,7 @@ bool load_mesh_custom(Mesh *mesh, String _filepath) {
         } else {
             submesh->material.normal_texture_name = copy_string(normal_texture_filepath);
         }
+#endif
 
         fread(&submesh->material.diffuse_color.x, sizeof(float), 4, file);
         fread(&submesh->material.shininess, sizeof(float), 1, file);

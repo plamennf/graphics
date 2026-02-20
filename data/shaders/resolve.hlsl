@@ -17,6 +17,6 @@ Vertex_Output vertex_main(Quad_Vertex_Input input) {
 }
 
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
-    float4 texture_color = diffuse_texture.Sample(sampler_point, input.uv);
+    float4 texture_color = albedo_texture.Sample(sampler_point, input.uv);
     return texture_color * input.color;
 }

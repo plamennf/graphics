@@ -29,4 +29,4 @@ struct Quad_Vertex_Input {
 SamplerState sampler_point  : register(s0);
 SamplerState sampler_linear : register(s1);
 
-Texture2D diffuse_texture : register(t0);
+Texture2D albedo_texture : register(t0);

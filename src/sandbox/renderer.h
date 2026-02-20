@@ -8,6 +8,22 @@
 
 struct Mesh;
 
+enum Light_Type {
+    LIGHT_TYPE_UNKNOWN,
+    LIGHT_TYPE_DIRECTIONAL,
+    LIGHT_TYPE_POINT,
+    LIGHT_TYPE_SPOT,
+};
+
+struct Light {
+    Light_Type type;
+    Vector3 color;
+    float intensity;
+    float range;
+    float spot_inner_cone_angle;
+    float spot_outer_cone_angle;
+};
+
 struct Quad_Vertex {
     Vector2 position;
     Vector4 color;
@@ -68,7 +84,7 @@ struct Render_Item_Info {
     Gpu_Buffer *index_buffer;
     int num_indices;
 
-    Texture *diffuse_texture;
+    Texture *albedo_texture;
     
     Per_Subobject_Uniforms uniforms;
 };
@@ -79,7 +95,7 @@ enum Render_Pipeline_Type {
 };
 
 enum Texture_Type {
-    TEXTURE_DIFFUSE,
+    TEXTURE_ALBEDO,
 };
 
 struct Command_Buffer : public Command_Buffer_Platform_Specific {
