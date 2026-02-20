@@ -81,38 +81,38 @@ static void draw_one_frame() {
 
     per_scene_uniforms.camera_position = camera.position;
 
-    Light center_light = {};
-    center_light.type = LIGHT_TYPE_POINT;
-    center_light.position = { 0.0f, 12.0f, 0.0f };
-    center_light.color = { 1.0f, 0.85f, 0.7f };
-    center_light.intensity = 120.0f;
-    center_light.range = 25.0f;
+    Light l0 = {};
+l0.type = LIGHT_TYPE_POINT;
+l0.position = { 0.0f, 32.0f, 0.0f };
+l0.color = { 1.0f, 0.85f, 0.7f };
+l0.intensity = 600.0f;
+l0.range = 60.0f;
 
-    Light blue_light = {};
-    blue_light.type = LIGHT_TYPE_POINT;
-    blue_light.position = { -10.0f, 8.0f, 5.0f };
-    blue_light.color = { 0.4f, 0.6f, 1.0f };   // cool blue
-    blue_light.intensity = 90.0f;
-    blue_light.range = 18.0f;
+    Light l1 = {};
+l1.type = LIGHT_TYPE_POINT;
+l1.position = { -30.0f, 15.0f, 0.0f };
+l1.color = { 0.4f, 0.6f, 1.0f };
+l1.intensity = 400.0f;
+l1.range = 45.0f;
 
-    Light strong_light = {};
-    strong_light.type = LIGHT_TYPE_POINT;
-    strong_light.position = { 8.0f, 6.0f, -5.0f };
-    strong_light.color = { 1.0f, 1.0f, 1.0f };
-    strong_light.intensity = 250.0f;
-    strong_light.range = 15.0f;
+    Light l2 = {};
+l2.type = LIGHT_TYPE_POINT;
+l2.position = { 30.0f, 12.0f, -10.0f };
+l2.color = { 1.0f, 1.0f, 1.0f };
+l2.intensity = 700.0f;
+l2.range = 40.0f;
 
-    Light fill_light = {};
-    fill_light.type = LIGHT_TYPE_POINT;
-    fill_light.position = { 0.0f, 5.0f, -12.0f };
-    fill_light.color = { 1.0f, 0.95f, 0.8f };
-    fill_light.intensity = 40.0f;
-    fill_light.range = 30.0f;
+    Light l3 = {};
+l3.type = LIGHT_TYPE_POINT;
+l3.position = { 0.0f, 10.0f, -25.0f };
+l3.color = { 1.0f, 0.95f, 0.8f };
+l3.intensity = 250.0f;
+l3.range = 50.0f;
 
-    per_scene_uniforms.lights[0] = center_light;
-    per_scene_uniforms.lights[1] = blue_light;
-    per_scene_uniforms.lights[2] = strong_light;
-    per_scene_uniforms.lights[3] = fill_light;
+    per_scene_uniforms.lights[0] = l0;
+    per_scene_uniforms.lights[1] = l1;
+    per_scene_uniforms.lights[2] = l2;
+    per_scene_uniforms.lights[3] = l3;
     
     set_per_scene_uniforms(&cb, &per_scene_uniforms);
 

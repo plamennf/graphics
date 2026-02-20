@@ -76,7 +76,7 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
         float3 H   = normalize(V + L);
         float dist = length(lights[i].position - input.world_position);
         float attenuation = 1.0 / (dist * dist);
-        float3 radiance = lights[i].color * attenuation;
+        float3 radiance = lights[i].color * attenuation * lights[i].intensity;
 
         float NDF = distribution_ggx(N, H, roughness);
         float G   = geometry_smith(N, V, L, roughness);
@@ -96,7 +96,7 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
 
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
     float3 color   = ambient + Lo;
-    //color = color / (color + float3(1.0));
+    color = color / (color + float3(1.0, 1.0, 1.0));
     
     return float4(color, 1.0);
 }
