@@ -81,38 +81,74 @@ static void draw_one_frame() {
 
     per_scene_uniforms.camera_position = camera.position;
 
+    Light sun = {};
+    sun.type      = LIGHT_TYPE_DIRECTIONAL;
+    sun.direction = normalize_or_zero(v3(-0.3f, -1.0f, -0.5f));
+    sun.color     = v3(1.0f, 0.95f, 0.85f);
+    sun.intensity = 1.2f;
+
     Light l0 = {};
     l0.type = LIGHT_TYPE_POINT;
-    l0.position = { 0.0f, 32.0f, 0.0f };
-    l0.color = { 1.0f, 0.85f, 0.7f };
+    l0.position = v3(0.0f, 32.0f, 0.0f);
+    l0.color = v3(1.0f, 0.85f, 0.7f);
     l0.intensity = 600.0f;
     l0.range = 60.0f;
 
     Light l1 = {};
     l1.type = LIGHT_TYPE_POINT;
-    l1.position = { -30.0f, 15.0f, 0.0f };
-    l1.color = { 0.4f, 0.6f, 1.0f };
+    l1.position = v3(-30.0f, 15.0f, 0.0f);
+    l1.color = v3(0.4f, 0.6f, 1.0f);
     l1.intensity = 400.0f;
     l1.range = 45.0f;
 
     Light l2 = {};
     l2.type = LIGHT_TYPE_POINT;
-    l2.position = { 30.0f, 12.0f, -10.0f };
-    l2.color = { 1.0f, 1.0f, 1.0f };
+    l2.position = v3(30.0f, 12.0f, -10.0f);
+    l2.color = v3(1.0f, 1.0f, 1.0f);
     l2.intensity = 700.0f;
     l2.range = 40.0f;
 
     Light l3 = {};
     l3.type = LIGHT_TYPE_POINT;
-    l3.position = { 0.0f, 10.0f, -25.0f };
-    l3.color = { 1.0f, 0.95f, 0.8f };
+    l3.position = v3(0.0f, 10.0f, -25.0f);
+    l3.color = v3(1.0f, 0.95f, 0.8f);
     l3.intensity = 250.0f;
     l3.range = 50.0f;
 
-    per_scene_uniforms.lights[0] = l0;
-    per_scene_uniforms.lights[1] = l1;
-    per_scene_uniforms.lights[2] = l2;
-    per_scene_uniforms.lights[3] = l3;
+    Light l4 = {};
+    l4.type = LIGHT_TYPE_POINT;
+    l4.position = v3(-15.0f, 10.0f, 20.0f);
+    l4.color = v3(0.6f, 0.7f, 1.0f);
+    l4.intensity = 350.0f;
+    l4.range = 35.0f;
+
+    Light l5 = {};
+    l5.type = LIGHT_TYPE_POINT;
+    l5.position = v3(20.0f, 18.0f, 10.0f);
+    l5.color = v3(1.0f, 0.9f, 0.75f);
+    l5.intensity = 400.0f;
+    l5.range = 40.0f;
+
+    Light spot_light = {};
+    if (globals.flashlight_on) {
+        spot_light.type      = LIGHT_TYPE_SPOT;
+        spot_light.position  = camera.position;
+        spot_light.direction = normalize_or_zero(camera.target);
+        spot_light.color     = v3(1.0f, 1.0f, 0.9f);
+        spot_light.intensity = 800.0f;
+        spot_light.range     = 50.0f;
+        spot_light.spot_inner_cone_angle = cosf(to_radians(12.5f));
+        spot_light.spot_outer_cone_angle = cosf(to_radians(20.0f));
+    }
+    
+    per_scene_uniforms.lights[0] = sun;
+    per_scene_uniforms.lights[1] = l0;
+    per_scene_uniforms.lights[2] = l1;
+    per_scene_uniforms.lights[3] = l2;
+    per_scene_uniforms.lights[4] = l3;
+    per_scene_uniforms.lights[5] = l4;
+    per_scene_uniforms.lights[6] = l5;
+    per_scene_uniforms.lights[7] = spot_light;
     
     set_per_scene_uniforms(&cb, &per_scene_uniforms);
 
@@ -278,6 +314,10 @@ int main(int argc, char *argv[]) {
 
         if (is_key_pressed(KEY_U)) {
             globals.enable_imgui = !globals.enable_imgui;
+        }
+
+        if (is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) {
+            globals.flashlight_on = !globals.flashlight_on;
         }
         
         if (should_show_cursor) {

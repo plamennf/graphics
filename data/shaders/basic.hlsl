@@ -72,10 +72,38 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
     float3 Lo = float3(0.0, 0.0, 0.0);
     [unroll]
     for (int i = 0; i < MAX_LIGHTS; i++) {
-        float3 L   = normalize(lights[i].position - input.world_position);
+        float3 L;
+        float attenuation = 1.0;
+
+        switch (lights[i].type) {
+            case LIGHT_TYPE_DIRECTIONAL: {
+                L = normalize(-lights[i].direction);
+            } break;
+
+            case LIGHT_TYPE_POINT: {
+                L = normalize(lights[i].position - input.world_position);
+                float dist = length(lights[i].position - input.world_position);
+                attenuation = 1.0 / (dist * dist);
+            } break;
+
+            case LIGHT_TYPE_SPOT: {
+                L = normalize(lights[i].position - input.world_position);
+                float dist = length(lights[i].position - input.world_position);
+                attenuation = 1.0 / (dist * dist);
+
+                float3 spot_dir  = normalize(-lights[i].direction);
+                float  cos_theta = dot(L, spot_dir);
+                float  epsilon   = lights[i].spot_inner_cone_angle - lights[i].spot_outer_cone_angle;
+                float  intensity = clamp((cos_theta - lights[i].spot_outer_cone_angle) / epsilon, 0.0, 1.0);
+                attenuation *= intensity;
+            } break;
+
+            default: {
+                L = float3(0.0, 0.0, 0.0);
+            } break;
+        }
+        
         float3 H   = normalize(V + L);
-        float dist = length(lights[i].position - input.world_position);
-        float attenuation = 1.0 / (dist * dist);
         float3 radiance = lights[i].color * attenuation * lights[i].intensity;
 
         float NDF = distribution_ggx(N, H, roughness);

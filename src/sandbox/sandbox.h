@@ -13,6 +13,7 @@ struct Global_Variables {
     Texture *white_texture = NULL;
 
     bool enable_imgui = true;
+    bool flashlight_on = false;
 };
 
 extern Global_Variables globals;

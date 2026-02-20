@@ -8,7 +8,7 @@
 
 struct Mesh;
 
-const int MAX_LIGHTS = 4;
+const int MAX_LIGHTS = 8;
 
 enum Light_Type {
     LIGHT_TYPE_UNKNOWN,
@@ -20,12 +20,14 @@ enum Light_Type {
 struct Light {
     Light_Type type;
     Vector3 position;
+    Vector3 direction;
+    float _padding0;
     Vector3 color;
+    float _padding1;
     float intensity;
     float range;
     float spot_inner_cone_angle;
     float spot_outer_cone_angle;
-    float padding;
 };
 
 struct Quad_Vertex {

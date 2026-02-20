@@ -1,4 +1,4 @@
-static const int MAX_LIGHTS = 4;
+static const int MAX_LIGHTS = 8;
 
 static const float PI = 3.14159265359;
 
@@ -10,7 +10,10 @@ static const int LIGHT_TYPE_SPOT = 3;
 struct Light {
     int type;
     float3 position;
+    float3 direction;
+    float _padding0;
     float3 color;
+    float _padding1;
     float intensity;
     float range;
     float spot_inner_cone_angle;
