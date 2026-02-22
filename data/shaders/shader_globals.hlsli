@@ -45,7 +45,7 @@ cbuffer Per_Object_Uniforms : register(b1) {
 
 cbuffer Per_Subobject_Uniforms : register(b2) {
     float4 material_diffuse_color;
-    float material_shininess;
+    int has_normal_map;
 }
 
 struct Mesh_Vertex_Input {

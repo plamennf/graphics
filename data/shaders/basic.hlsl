@@ -5,6 +5,7 @@ struct Vertex_Output {
     float2 uv       : TEXCOORD;
     float3 normal   : NORMAL;
     float3 world_position : POSITION;
+    float3x3 TBN    : TBNMatrix;
 };
 
 Vertex_Output vertex_main(Mesh_Vertex_Input input) {
@@ -15,6 +16,12 @@ Vertex_Output vertex_main(Mesh_Vertex_Input input) {
     result.position = mul(projection_matrix, mul(view_matrix, world_position));
     result.uv       = float2(input.uv.x, 1.0 - input.uv.y);
     result.normal   = input.normal;
+
+    float3 T = normalize(mul(world_matrix, float4(input.tangent, 0.0)).xyz);
+    float3 N = normalize(mul(world_matrix, float4(input.normal,  0.0)).xyz);
+    T = normalize(T - dot(T, N) * N);
+    float3 B = cross(N, T);
+    result.TBN = transpose(float3x3(T, B, N));
     
     return result;
 }
@@ -141,6 +148,13 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
     float3 N = normalize(normal);
     float3 V = normalize(camera_position - input.world_position);
 
+    if (has_normal_map == 1) {
+        normal = normal_texture.Sample(sampler_linear, input.uv).xyz;
+        normal = normalize(normal);
+
+        V = mul(input.TBN, V);
+    }
+    
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, albedo, metallic);
 

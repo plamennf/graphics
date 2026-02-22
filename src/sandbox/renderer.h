@@ -94,7 +94,7 @@ struct Per_Object_Uniforms {
 
 struct Per_Subobject_Uniforms {
     Vector4 diffuse_color;
-    float shininess;
+    int has_normal_map;
     float padding[3];
 };
 
