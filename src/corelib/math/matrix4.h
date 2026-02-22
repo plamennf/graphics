@@ -38,6 +38,17 @@ inline Matrix4 operator*(Matrix4 a, Matrix4 b) {
     return result;
 }
 
+inline Vector4 operator*(Matrix4 a, Vector4 b) {
+    Vector4 result;
+
+    result.x = a.e[0][0] * b.x + a.e[0][1] * b.y + a.e[0][2] * b.z + a.e[0][3] * b.w;
+    result.y = a.e[1][0] * b.x + a.e[1][1] * b.y + a.e[1][2] * b.z + a.e[1][3] * b.w;
+    result.z = a.e[2][0] * b.x + a.e[2][1] * b.y + a.e[2][2] * b.z + a.e[2][3] * b.w;
+    result.w = a.e[3][0] * b.x + a.e[3][1] * b.y + a.e[3][2] * b.z + a.e[3][3] * b.w;
+
+    return result;
+}
+
 inline Matrix4 transpose(Matrix4 m) {
     Matrix4 result;
     for (int row = 0; row < 4; row++) {
@@ -178,8 +189,8 @@ inline Matrix4 inverse(Matrix4 m) {
     return inv;
 }
 
-inline Matrix4 make_perspective(float aspect_ratio, float fov_in_degrees, float z_near, float z_far) {
-    float y_scale = (1.0f / tanf(fov_in_degrees * 0.5f * (PI / 180.0f))) * aspect_ratio;
+inline Matrix4 make_perspective(float aspect_ratio, float v_fov_in_degrees, float z_near, float z_far) {
+    float y_scale = (1.0f / tanf(v_fov_in_degrees * 0.5f * (PI / 180.0f)));
     float x_scale = y_scale / aspect_ratio;
     float frustum_length = z_far - z_near;
 
@@ -287,10 +298,10 @@ inline Matrix4 make_orthographic(float l, float r, float b, float t, float n, fl
 
     result._11 = 2.0f/(r-l);
     result._22 = 2.0f/(t-b);
-    result._33 = -2.0f/(f-n);
+    result._33 = -1.0f/(f-n);
     result._14 = -((r+l)/(r-l));
     result._24 = -((t+b)/(t-b));
-    result._34 = -((f+n)/(f-n));
+    result._34 = -n/(f-n);
     
     return result;
 }

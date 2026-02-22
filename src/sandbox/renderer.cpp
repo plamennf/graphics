@@ -9,17 +9,21 @@ Command_Buffer immediate_cb;
 
 Shader shader_basic;
 Shader shader_resolve;
+Shader shader_shadow;
 
 Texture back_buffer;
 
 Texture offscreen_render_target;
 Texture offscreen_depth_target;
 
+Texture shadow_map_targets[MAX_SHADOW_CASCADES];
+
 bool init_shaders() {
 #define LOAD_SHADER(name, type) if (!load_shader(&shader_##name, #name, type)) return false;
 
     LOAD_SHADER(basic,   RENDER_VERTEX_TYPE_MESH);
     LOAD_SHADER(resolve, RENDER_VERTEX_TYPE_QUAD);
+    LOAD_SHADER(shadow,  RENDER_VERTEX_TYPE_MESH);
     
 #undef LOAD_SHADER
     

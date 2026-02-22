@@ -9,8 +9,12 @@
 struct Mesh;
 
 const int MAX_LIGHTS = 8;
+const int MAX_SHADOW_CASCADES = 4;
 
-enum Light_Type {
+const int SHADOW_MAP_WIDTH  = 4096;
+const int SHADOW_MAP_HEIGHT = 4096;
+
+enum Light_Type : int {
     LIGHT_TYPE_UNKNOWN,
     LIGHT_TYPE_DIRECTIONAL,
     LIGHT_TYPE_POINT,
@@ -19,16 +23,19 @@ enum Light_Type {
 
 struct Light {
     Light_Type type;
+    int _padding0[3];
     Vector3 position;
-    Vector3 direction;
-    float _padding0;
-    Vector3 color;
     float _padding1;
+    Vector3 direction;
+    float _padding2;
+    Vector3 color;
     float intensity;
     float range;
     float spot_inner_cone_angle;
     float spot_outer_cone_angle;
+    float _padding3;
 };
+static_assert(sizeof(Light) % 16 == 0, "Light struct must be 16-byte aligned");
 
 struct Quad_Vertex {
     Vector2 position;
@@ -39,9 +46,12 @@ struct Quad_Vertex {
 struct Per_Scene_Uniforms {
     Matrix4 projection_matrix;
     Matrix4 view_matrix;
+    Matrix4 light_matrix[MAX_SHADOW_CASCADES];
+    Vector4 cascade_splits[MAX_SHADOW_CASCADES];  // We are wasting memory right now because of hlsl alignment rules. If we end up with a MAX_SHADOW_CASCADES value which is a multiple of 4 we can fix this.
     Light lights[MAX_LIGHTS];
     Vector3 camera_position;
-    float padding;
+    int shadow_cascade_index;
+    //float padding[12];
 };
 
 enum Render_Vertex_Type {
@@ -104,6 +114,7 @@ struct Render_Item_Info {
 enum Render_Pipeline_Type {
     RENDER_PIPELINE_MESH,
     RENDER_PIPELINE_QUAD,
+    RENDER_PIPELINE_SHADOW,
 };
 
 enum Texture_Type {
@@ -111,6 +122,7 @@ enum Texture_Type {
     TEXTURE_NORMAL,
     TEXTURE_METALLIC_ROUGHNESS,
     TEXTURE_AO,
+    TEXTURE_SHADOW_MAP,
 };
 
 struct Command_Buffer : public Command_Buffer_Platform_Specific {
@@ -126,6 +138,8 @@ extern Texture back_buffer;
 
 extern Texture offscreen_render_target;
 extern Texture offscreen_depth_target;
+
+extern Texture shadow_map_targets[MAX_SHADOW_CASCADES];
 
 void init_renderer(bool vsync);
 void shutdown_renderer();

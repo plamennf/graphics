@@ -19,6 +19,81 @@ Vertex_Output vertex_main(Mesh_Vertex_Input input) {
     return result;
 }
 
+int calculate_cascade_index(float3 world_position, float3 camera_position) {
+    //float depth = length(world_position - camera_position);
+    float3 view_pos = mul(view_matrix, float4(world_position, 1.0)).xyz;
+    float depth = -view_pos.z;   // because -Z forward
+
+    int index = MAX_SHADOW_CASCADES - 1;
+    if (depth < cascade_splits[0].x) index = 0;
+    else if (depth < cascade_splits[1].x) index = 1;
+    else if (depth < cascade_splits[2].x) index = 2;
+
+    return index;
+}
+
+float pcf_shadow(float3 proj_coords, int cascade_index) {
+    float shadow = 0.0;
+
+    float current_depth = proj_coords.z;
+    float bias = 0.005;
+    
+    [unroll]
+    for (int x = -1; x <= 1; x++) {
+        [unroll]
+        for (int y = - 1; y <= 1; y++) {
+            switch (cascade_index) {
+                case 0: {
+                    float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+                    float shadow_depth = shadow_textures[0].Sample(sampler_point, proj_coords.xy + offset).r;
+                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                } break;
+
+                case 1: {
+                    float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+                    float shadow_depth = shadow_textures[1].Sample(sampler_point, proj_coords.xy + offset).r;
+                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                } break;
+
+                case 2: {
+                    float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+                    float shadow_depth = shadow_textures[2].Sample(sampler_point, proj_coords.xy + offset).r;
+                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                } break;
+
+                case 3: {
+                    float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+                    float shadow_depth = shadow_textures[3].Sample(sampler_point, proj_coords.xy + offset).r;
+                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                } break;
+            }
+        }
+    }
+
+    shadow /= 9.0;
+    return shadow;
+}
+
+float calculate_shadow(int cascade_index, float3 world_position) {
+    float4 shadow_pos;
+
+    switch (cascade_index) {
+        case 0: shadow_pos  = mul(light_matrix[0], float4(world_position, 1.0)); break;
+        case 1: shadow_pos  = mul(light_matrix[1], float4(world_position, 1.0)); break;
+        case 2: shadow_pos  = mul(light_matrix[2], float4(world_position, 1.0)); break;
+        case 3: shadow_pos  = mul(light_matrix[3], float4(world_position, 1.0)); break;
+
+        default: shadow_pos = float4(0.0, 0.0, 0.0, 1.0); break;
+    }
+    
+    float3 proj_coords = shadow_pos.xyz / shadow_pos.w;
+    proj_coords.x = proj_coords.x * 0.5 + 0.5;
+    proj_coords.y = proj_coords.y * -0.5 + 0.5;
+
+    float shadow = pcf_shadow(proj_coords, cascade_index);
+    return shadow;
+}
+
 float distribution_ggx(float3 N, float3 H, float roughness) {
     float a      = roughness * roughness;
     float a2     = a * a;
@@ -69,6 +144,9 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, albedo, metallic);
 
+    int cascade_index = calculate_cascade_index(input.world_position, camera_position);
+    float shadow = calculate_shadow(cascade_index, input.world_position);
+    
     float3 Lo = float3(0.0, 0.0, 0.0);
     [unroll]
     for (int i = 0; i < MAX_LIGHTS; i++) {
@@ -119,7 +197,7 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
         float3 specular   = numerator / denominator;
 
         float NdotL = max(dot(N, L), 0.0);
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+        Lo += ((kD * albedo / PI + specular) * radiance * NdotL) * shadow;
     }
 
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;

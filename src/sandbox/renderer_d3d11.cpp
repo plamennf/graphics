@@ -20,8 +20,11 @@ static bool should_vsync;
 
 extern Shader shader_basic;
 extern Shader shader_resolve;
+extern Shader shader_shadow;
 
 extern bool init_shaders();
+
+static bool shadow_maps_created = false;
 
 static ID3D11Device *device;
 static ID3D11DeviceContext *device_context;
@@ -41,10 +44,15 @@ static Gpu_Buffer fullscreen_quad_ib;
 static ID3D11InputLayout *quad_input_layout = NULL;
 static ID3D11RasterizerState *quad_rasterizer_state = NULL;
 static ID3D11DepthStencilState *quad_depth_stencil_state = NULL;
+static ID3D11BlendState *quad_blend_enabled = NULL;
 
 static ID3D11InputLayout *mesh_vertex_input_layout = NULL;
 static ID3D11RasterizerState *rasterizer_state_for_mesh_rendering = NULL;
 static ID3D11DepthStencilState *depth_stencil_state_for_mesh_rendering = NULL;
+static ID3D11BlendState *opaque_mesh_blend_disabled = NULL;
+
+static ID3D11BlendState *no_render_target_write_blend_state = NULL;
+static ID3D11RasterizerState *rasterizer_state_for_shadow_rendering = NULL;
 
 static void init_back_buffer() {
     swap_chain->GetBuffer(0, IID_PPV_ARGS(&back_buffer.texture));
@@ -71,6 +79,29 @@ static void init_back_buffer() {
     dsv_desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
     device->CreateDepthStencilView(offscreen_depth_target.texture, &dsv_desc, &offscreen_depth_target.dsv);
 
+    if (!shadow_maps_created) {
+        for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
+            texture_desc.Width     = SHADOW_MAP_WIDTH;
+            texture_desc.Height    = SHADOW_MAP_HEIGHT;
+            texture_desc.Format    = DXGI_FORMAT_R32_TYPELESS;
+            texture_desc.BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+            device->CreateTexture2D(&texture_desc, NULL, &shadow_map_targets[i].texture);
+
+            device->CreateDepthStencilView(shadow_map_targets[i].texture, &dsv_desc, &shadow_map_targets[i].dsv);
+
+            D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
+            srv_desc.Format                    = DXGI_FORMAT_R32_FLOAT;
+            srv_desc.ViewDimension             = D3D11_SRV_DIMENSION_TEXTURE2D;
+            srv_desc.Texture2D.MostDetailedMip = 0;
+            srv_desc.Texture2D.MipLevels       = 1;
+            device->CreateShaderResourceView(shadow_map_targets[i].texture, &srv_desc, &shadow_map_targets[i].srv);
+        }
+
+        shadow_maps_created = true;
+    }
+        
+    texture_desc.Width     = platform_window_width;
+    texture_desc.Height    = platform_window_height;
     texture_desc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
     texture_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     device->CreateTexture2D(&texture_desc, NULL, &offscreen_render_target.texture);
@@ -157,7 +188,31 @@ void init_renderer(bool vsync) {
         create_gpu_buffer(&fullscreen_quad_vb, GPU_BUFFER_TYPE_VERTEX, sizeof(vertices), sizeof(Quad_Vertex), vertices, false);
         create_gpu_buffer(&fullscreen_quad_ib, GPU_BUFFER_TYPE_INDEX, sizeof(indices), 0, indices, false);
     }
-    
+
+    //
+    // Create blend states
+    //
+    {
+        D3D11_BLEND_DESC blend_desc = {};
+        blend_desc.RenderTarget[0].BlendEnable = FALSE;
+        blend_desc.RenderTarget[0].RenderTargetWriteMask = 0;
+        blend_desc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        blend_desc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
+        blend_desc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        blend_desc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        blend_desc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
+        blend_desc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+        blend_desc.AlphaToCoverageEnable = FALSE;
+        device->CreateBlendState(&blend_desc, &no_render_target_write_blend_state);
+
+        blend_desc.RenderTarget[0].BlendEnable = TRUE;
+        blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        device->CreateBlendState(&blend_desc, &quad_blend_enabled);
+
+        blend_desc.RenderTarget[0].BlendEnable = FALSE;
+        device->CreateBlendState(&blend_desc, &opaque_mesh_blend_disabled);
+    }
+
     //
     // Create sampler states
     //
@@ -197,6 +252,9 @@ void init_renderer(bool vsync) {
 
         rasterizer_desc.CullMode = D3D11_CULL_NONE;
         device->CreateRasterizerState(&rasterizer_desc, &quad_rasterizer_state);
+
+        rasterizer_desc.CullMode = D3D11_CULL_FRONT;
+        device->CreateRasterizerState(&rasterizer_desc, &rasterizer_state_for_shadow_rendering);
     }
 
     //
@@ -518,9 +576,8 @@ void imgui_shutdown_dx11() {
 }
 
 bool init_command_buffer(Command_Buffer *cb) {
-    //device->CreateDeferredContext(0, &cb->context);
-    cb->context = device_context;
-
+    device->CreateDeferredContext(0, &cb->context);
+    
     if (!create_gpu_buffer(&cb->per_scene_cb,     GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Scene_Uniforms), 0, NULL, true)) return false;
     if (!create_gpu_buffer(&cb->per_object_cb,    GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Object_Uniforms), 0, NULL, true)) return false;
     if (!create_gpu_buffer(&cb->per_subobject_cb, GPU_BUFFER_TYPE_CONSTANT, sizeof(Per_Subobject_Uniforms), 0, NULL, true)) return false;
@@ -584,6 +641,11 @@ void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type) {
             cb->context->VSSetShader(shader_basic.vertex_shader, NULL, 0);
             cb->context->PSSetShader(shader_basic.pixel_shader,  NULL, 0);
             cb->context->IASetInputLayout(mesh_vertex_input_layout);
+            cb->context->OMSetBlendState(opaque_mesh_blend_disabled, NULL, 0xFFFFFFFF);
+
+            for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
+                set_texture(cb, (Texture_Type)(TEXTURE_SHADOW_MAP + i), &shadow_map_targets[i]);
+            }
         } break;
 
         case RENDER_PIPELINE_QUAD: {
@@ -592,6 +654,16 @@ void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type) {
             cb->context->VSSetShader(shader_resolve.vertex_shader, NULL, 0);
             cb->context->PSSetShader(shader_resolve.pixel_shader,  NULL, 0);
             cb->context->IASetInputLayout(quad_input_layout);
+            cb->context->OMSetBlendState(quad_blend_enabled, NULL, 0xFFFFFFFF);
+        } break;
+
+        case RENDER_PIPELINE_SHADOW: {
+            cb->context->RSSetState(rasterizer_state_for_shadow_rendering);
+            cb->context->OMSetDepthStencilState(depth_stencil_state_for_mesh_rendering, 0);
+            cb->context->OMSetBlendState(no_render_target_write_blend_state, NULL, 0xFFFFFFFF);
+            cb->context->VSSetShader(shader_shadow.vertex_shader, NULL, 0);
+            cb->context->PSSetShader(shader_shadow.pixel_shader,  NULL, 0);
+            cb->context->IASetInputLayout(mesh_vertex_input_layout);
         } break;
     }
 
