@@ -253,7 +253,8 @@ void init_renderer(bool vsync) {
         rasterizer_desc.CullMode = D3D11_CULL_NONE;
         device->CreateRasterizerState(&rasterizer_desc, &quad_rasterizer_state);
 
-        rasterizer_desc.CullMode = D3D11_CULL_FRONT;
+        rasterizer_desc.DepthClipEnable = FALSE;
+        rasterizer_desc.CullMode = D3D11_CULL_NONE;
         device->CreateRasterizerState(&rasterizer_desc, &rasterizer_state_for_shadow_rendering);
     }
 

@@ -7,7 +7,7 @@
 
 #include <stdio.h>
 
-//#define DO_SPONZA
+#define DO_SPONZA
 
 Global_Variables globals;
 
@@ -30,6 +30,10 @@ struct Shadow_Bounding_Box {
 };
 
 static Shadow_Bounding_Box shadow_bounding_boxes[MAX_SHADOW_CASCADES];
+
+//static Vector3 directional_light_direction = v3(-0.3f, -1.0f, -0.5f);
+//static Vector3 directional_light_direction = v3(0, 0.05f, -1.0f); // Horizon
+static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
 
 static void imgui_init() {
     float main_scale = platform_imgui_get_scale();
@@ -218,7 +222,7 @@ static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Lig
 static void render_scene(Command_Buffer *cb) {
 #ifdef DO_SPONZA
     render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(0, 0, 1, 1));
-    float scale = 0.001f;
+    float scale = 0.025f;
     render_mesh(cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
 #else
     render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(0, 0, 1, 1));
@@ -244,7 +248,7 @@ static void draw_one_frame() {
     
     Light sun = {};
     sun.type      = LIGHT_TYPE_DIRECTIONAL;
-    sun.direction = normalize_or_zero(v3(-0.3f, -1.0f, -0.5f));
+    sun.direction = normalize_or_zero(directional_light_direction);
     sun.color     = v3(1.0f, 0.95f, 0.85f);
     sun.intensity = 1.2f;
 
@@ -420,6 +424,7 @@ static void draw_imgui_stuff(float dt) {
     ImGui::SliderFloat("Max jump velocity", &camera.max_jump_velocity, 0.1f, 2.0f);
     ImGui::SliderFloat("Gravity", &camera.gravity, 1.0f, 10.0f);
     ImGui::SliderFloat("Head y", &camera.head_y, 0.0f, 10.0f);
+    ImGui::SliderFloat3("Directional light direction", &directional_light_direction.x, 0.0f, 2.0f);
     ImGui::End();
 }
 
