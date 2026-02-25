@@ -1,5 +1,10 @@
 #pragma once
 
+struct Memory_Budget {
+    u64 used;
+    u64 max;
+};
+
 struct Gpu_Buffer_Platform_Specific {
     struct ID3D11Buffer *buffer;
 };
@@ -20,3 +25,5 @@ struct Shader {
 struct Command_Buffer_Platform_Specific {
     struct ID3D11DeviceContext *context;
 };
+
+Memory_Budget get_vram_memory();

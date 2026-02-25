@@ -362,6 +362,9 @@ static void draw_imgui_stuff(float dt) {
     ImGui::Text("FPS: %d", (int)(1.0f / current_dt));
     ImGui::Text("Frame time: %.2fms", current_dt * 1000.0f);
 
+    Memory_Budget memory_info = get_vram_memory();
+    ImGui::Text("VRAM: %d/%d", memory_info.used / 1000 / 1000, memory_info.max / 1000 / 1000);
+    
     for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
         ImGui::Text("X: %f to %f", shadow_bounding_boxes[i].min_x, shadow_bounding_boxes[i].max_x);
         ImGui::Text("Y: %f to %f", shadow_bounding_boxes[i].min_y, shadow_bounding_boxes[i].max_y);

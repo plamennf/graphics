@@ -736,3 +736,27 @@ void set_texture(Command_Buffer *cb, Texture_Type type, Texture *texture) {
         cb->context->PSSetShaderResources((int)type, 1, null_srv);
     }
 }
+
+Memory_Budget get_vram_memory() {
+    IDXGIDevice *dxgi_device = NULL;
+    device->QueryInterface(IID_PPV_ARGS(&dxgi_device));
+    defer { SafeRelease(dxgi_device); };
+
+    IDXGIAdapter *dxgi_adapter = NULL;
+    dxgi_device->GetAdapter(&dxgi_adapter);
+    defer { SafeRelease(dxgi_adapter); };
+
+    IDXGIAdapter3 *adapter = NULL;
+    dxgi_adapter->QueryInterface(IID_PPV_ARGS(&adapter));
+    defer { SafeRelease(adapter); };
+
+    DXGI_QUERY_VIDEO_MEMORY_INFO memory_info = {};
+    adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memory_info);
+
+    Memory_Budget result = {};
+
+    result.used = memory_info.CurrentUsage;
+    result.max  = memory_info.Budget;
+
+    return result;
+}
