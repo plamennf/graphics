@@ -8,6 +8,11 @@ const float WORLD_WIDTH  = 100;
 const float WORLD_HEIGHT = 40;
 const float WORLD_DEPTH  = 60;
 
+enum Program_Mode {
+    PROGRAM_MODE_GAME,
+    PROGRAM_MODE_EDITOR,
+};
+
 struct Global_Variables {
     float mouse_sensitivity = 0.2f;
 
@@ -20,6 +25,10 @@ struct Global_Variables {
     bool flashlight_on = false;
 
     float shadow_cascade_splits[MAX_SHADOW_CASCADES] = { 10.0f, 25.0f, 60.0f, CAMERA_Z_FAR };
+
+    Program_Mode program_mode = PROGRAM_MODE_GAME;
 };
 
 extern Global_Variables globals;
+
+void toggle_editor();

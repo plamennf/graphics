@@ -7,5 +7,7 @@ struct Texture_Registry {
 
     ~Texture_Registry();
     
-    Texture *find_or_load(String name);
+    Texture *find_or_load(const char *name);
+
+    void recursive_init_all();
 };

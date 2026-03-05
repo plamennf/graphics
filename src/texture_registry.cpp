@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 
+#include <filesystem>
+
 // TODO: Copy-paste: Move this into corelib
 static bool file_exists(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
@@ -11,8 +13,7 @@ static bool file_exists(const char *filepath) {
     return true;
 }
 
-Texture *Texture_Registry::find_or_load(String _name) {
-    const char *name = temp_c_string(_name);
+Texture *Texture_Registry::find_or_load(const char *name) {
     Texture **_texture = texture_lookup.find((char *)name);
     if (_texture) return *_texture;
 
@@ -53,5 +54,29 @@ Texture_Registry::~Texture_Registry() {
 
         Texture *texture = texture_lookup.buckets[i].value;
         release_texture(texture);
+    }
+}
+
+void Texture_Registry::recursive_init_all() {
+    for (const auto &entry : std::filesystem::recursive_directory_iterator("data/textures")) {
+        if (entry.is_regular_file()) {
+            auto cpp_filename = entry.path().relative_path().string();
+            char *filename = (char *)cpp_filename.c_str();
+
+            filename = copy_string(filename);
+            defer { delete [] filename; };
+
+            const char *start = find_character_from_left(filename, '\\');
+            if (start) {
+                start++;
+            }
+
+            const char *slash = find_character_from_right(start, '.');
+            if (slash) {
+                filename[slash - filename] = 0;
+            }
+            
+            find_or_load(start);
+        }
     }
 }

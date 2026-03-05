@@ -5,6 +5,8 @@
 
 #include <stdio.h>
 
+#include <filesystem>
+
 // TODO: Copy-paste: Move this into corelib
 static bool file_exists(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
@@ -13,8 +15,7 @@ static bool file_exists(const char *filepath) {
     return true;
 }
 
-Mesh *Mesh_Registry::find_or_load(String _name) {
-    const char *name = temp_c_string(_name);
+Mesh *Mesh_Registry::find_or_load(const char *name) {
     Mesh **_mesh = mesh_lookup.find((char *)name);
     if (_mesh) return *_mesh;
 
@@ -66,7 +67,8 @@ Mesh *Mesh_Registry::find_or_load(String _name) {
     }
 
     mesh_lookup.add((char *)name, mesh);
-
+    all_names_in_order_of_loading.add(copy_string(name));
+    
     return mesh;
 }
 
@@ -80,6 +82,40 @@ Mesh_Registry::~Mesh_Registry() {
             
             release_gpu_buffer(&submesh->vertex_buffer);
             release_gpu_buffer(&submesh->index_buffer);
+        }
+    }
+}
+
+void Mesh_Registry::recursive_init_all() {
+    for (const auto &entry : std::filesystem::recursive_directory_iterator("data/meshes")) {
+        if (entry.is_regular_file()) {
+            if (entry.path().extension() != ".gltf") continue;
+            
+            auto cpp_filename = entry.path().relative_path().string();
+            char *filename = (char *)cpp_filename.c_str();
+            
+            filename = copy_string(filename);
+            defer { delete [] filename; };
+
+            const char *start = find_character_from_left(filename, '\\');
+            if (start) {
+                start++;
+            }
+
+            const char *slash = find_character_from_right(filename, '.');
+            if (slash) {
+                filename[slash - filename] = 0;
+            }
+
+            for (char *at = (char *)start; *at; at++) {
+                if (*at == '\\') {
+                    *at = '/';
+                }
+            }
+            
+            if (!find_or_load(start)) {
+                logprintf("Failed to load '%s'\n", start);
+            }
         }
     }
 }

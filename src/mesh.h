@@ -53,6 +53,8 @@ struct Submesh {
 };
 
 struct Mesh {
+    const char *filename;
+    
     int num_submeshes;
     Submesh *submeshes;
 };

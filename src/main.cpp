@@ -30,7 +30,7 @@ static void imgui_init() {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
     ImGui::StyleColorsDark();
 
@@ -302,52 +302,12 @@ static void draw_imgui_stuff(float dt) {
     
     ImGui::End();
 
-    ImGui::Begin("Sponza");
-    ImGui::BeginGroup();
-    if (ImGui::TreeNode("Submeshes"))
-    {
-        for (int i = 0; i < mesh->num_submeshes; ++i) {
-            Submesh *submesh   = &mesh->submeshes[i];
-            Material *material = &submesh->material;
-
-            ImGui::PushID(i);
-
-            char tree_node_name[64];
-            snprintf(tree_node_name, sizeof(tree_node_name), "Submesh %d", i);
-            if (ImGui::TreeNode(tree_node_name)) {
-                ImGui::Text("Vertices: %d", submesh->num_vertices);
-                ImGui::Text("Indices: %d", submesh->num_indices);
-
-                ImGui::Separator();
-                ImGui::Text("Material");
-
-                // Texture names
-                ImGui::Text("Albedo: %s", 
-                            material->albedo_texture_name ? material->albedo_texture_name : "None");
-
-                ImGui::Text("Normal: %s", 
-                            material->normal_texture_name ? material->normal_texture_name : "None");
-
-                ImGui::Text("Metallic/Roughness: %s", 
-                            material->metallic_roughness_texture_name ? material->metallic_roughness_texture_name : "None");
-
-                ImGui::Text("AO: %s", 
-                            material->ao_texture_name ? material->ao_texture_name : "None");
-
-                ImGui::Separator();
-
-                ImGui::ColorEdit4("Diffuse Color", (float *)&material->diffuse_color);
-                ImGui::SliderFloat("Shininess", &material->shininess, 1.0f, 256.0f);
-
-                ImGui::TreePop();
-            }
-
-            ImGui::PopID();
-        }
-
-        ImGui::TreePop();
+    ImGui::Begin("Meshes");
+    for (const char *name : globals.mesh_registry->all_names_in_order_of_loading) {
+        ImGui::PushID(name);
+        ImGui::Selectable(name);
+        ImGui::PopID();
     }
-    ImGui::EndGroup();
     ImGui::End();
 
     ImGui::Begin("Camera");
@@ -380,8 +340,11 @@ int main(int argc, char *argv[]) {
     
     if (!init_command_buffer(&cb)) return false;
     
-    globals.texture_registry = new Texture_Registry();    
+    globals.texture_registry = new Texture_Registry();
+    globals.texture_registry->recursive_init_all();
+    
     globals.mesh_registry    = new Mesh_Registry();
+    globals.mesh_registry->recursive_init_all();
         
     mesh = globals.mesh_registry->find_or_load("Prop_Chair");
     if (!mesh) return 1;
@@ -432,8 +395,14 @@ int main(int argc, char *argv[]) {
             globals.enable_imgui = !globals.enable_imgui;
         }
 
-        if (is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) {
-            globals.flashlight_on = !globals.flashlight_on;
+        if (is_key_pressed(KEY_E)) {
+            toggle_editor();
+        }
+
+        if (!should_show_cursor) {
+            if (is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)) {
+                globals.flashlight_on = !globals.flashlight_on;
+            }
         }
         
         if (should_show_cursor) {
@@ -490,4 +459,12 @@ int main(int argc, char *argv[]) {
     ImGui::DestroyContext();
     
     return 0;
+}
+
+void toggle_editor() {
+    if (globals.program_mode == PROGRAM_MODE_EDITOR) {
+        globals.program_mode = PROGRAM_MODE_GAME;
+    } else if (globals.program_mode == PROGRAM_MODE_GAME) {
+        globals.program_mode = PROGRAM_MODE_EDITOR;
+    }
 }

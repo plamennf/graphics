@@ -48,3 +48,26 @@ bool is_space(char c) {
                    (c == ' '));
     return result;
 }
+
+const char *find_character_from_right(const char *s, char c) {
+    if (!s) return NULL;
+
+    const char *end = s + string_length(s) - 1;
+    while (*end != *s) {
+        if (*end == c) return end;
+        end--;
+    }
+
+    return NULL;
+}
+
+const char *find_character_from_left(const char *s, char c) {
+    if (!s) return NULL;
+
+    while (*s) {
+        if (*s == c) return s;
+        s++;
+    }
+
+    return NULL;
+}
