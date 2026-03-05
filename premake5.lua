@@ -1,6 +1,6 @@
-workspace "graphics"
+workspace "fps"
 	architecture "x86_64"
-	startproject "sandbox"
+	startproject "fps"
 
 	configurations {
 		"Debug",
@@ -8,57 +8,7 @@ workspace "graphics"
 		"Dist"
 	}
 
-project "corelib"
-    kind "StaticLib"
-	language "C++"
-	cppdialect "C++20"
-	staticruntime "on"
-    multiprocessorcompile "on"
-
-    targetdir ("%{wks.location}/build/%{cfg.buildcfg}")
-	objdir ("%{wks.location}/build-int/%{cfg.buildcfg}/%{prj.name}")
-
-	pchheader "corelib.h"
-	pchsource "src/corelib/make_pch.cpp"
-
-    includedirs {
-        "external/include"
-    }
-
-    files {
-        "src/corelib/**.h",
-        "src/corelib/**.cpp",
-        "external/src/imgui/**.cpp",
-    }
-
-    defines {
-		"_CRT_SECURE_NO_WARNINGS",
-        "ENABLE_IMGUI",
-        "RENDER_D3D11",
-	}
-
-    filter "files:external/src/imgui/**.cpp"
-	    enablepch "off"
-
-    filter "system:windows"
-		systemversion "latest"
-
-    filter "configurations:Debug"
-		defines "BUILD_DEBUG"
-		runtime "Debug"
-		symbols "on"
-        
-	filter "configurations:Release"
-		defines "BUILD_RELEASE"
-		runtime "Release"
-		optimize "on"
-
-	filter "configurations:Dist"
-		defines "BUILD_DIST"
-		runtime "Release"
-		optimize "on"
-
-project "sandbox"
+project "fps"
     kind "ConsoleApp"
 	language "C++"
 	cppdialect "C++20"
@@ -69,26 +19,18 @@ project "sandbox"
 	objdir ("%{wks.location}/build-int/%{cfg.buildcfg}/%{prj.name}")
 
 	pchheader "pch.h"
-	pchsource "src/sandbox/make_pch.cpp"
+	pchsource "src/make_pch.cpp"
 
     includedirs {
-        "%{wks.location}/src",
-        "%{wks.location}/external/include",
+        "external/include",
         "%{wks.location}/tracy",
     }
 
-    libdirs {
-        "%{wks.location}/external/lib"
-    }
-
-    links {
-         "corelib",
-    }
-
     files {
-        "src/sandbox/**.h",
-        "src/sandbox/**.cpp",
-        "tracy/TracyClient.cpp",
+        "src/**.h",
+        "src/**.cpp",
+        "external/src/imgui/**.cpp",
+        "%{wks.location}/tracy/TracyClient.cpp"
     }
 
     defines {
@@ -100,7 +42,7 @@ project "sandbox"
 	    enablepch "off"
 
     filter "files:tracy/TracyClient.cpp"
-        enablepch "off"
+	    enablepch "off"
 
     filter "system:windows"
 		systemversion "latest"
@@ -120,24 +62,18 @@ project "sandbox"
 		runtime "Debug"
 		symbols "on"
 
-        libdirs {
-            "%{wks.location}/external/lib/Debug"
-        }
-
+        libdirs { "external/lib/Debug" }
+        
 	filter "configurations:Release"
 		defines { "BUILD_RELEASE", "TRACY_ENABLE" }
 		runtime "Release"
 		optimize "on"
 
-        libdirs {
-            "%{wks.location}/external/lib/Release"
-        }
+        libdirs { "external/lib/Release" }
 
 	filter "configurations:Dist"
 		defines "BUILD_DIST"
 		runtime "Release"
 		optimize "on"
 
-        libdirs {
-            "%{wks.location}/external/lib/Release"
-        }
+        libdirs { "external/lib/Release" }

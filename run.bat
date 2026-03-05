@@ -1,5 +1,5 @@
 @echo off
 
-build\Debug\sandbox.exe
-REM build\Release\sandbox.exe
-REM build\Dist\sandbox.exe
+build\Debug\fps.exe
+REM build\Release\fps.exe
+REM build\Dist\fps.exe

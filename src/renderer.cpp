@@ -1,4 +1,4 @@
-#include "corelib.h"
+#include "pch.h"
 #include "renderer.h"
 #include "mesh.h"
 
@@ -62,24 +62,24 @@ bool generate_gpu_data_for_mesh(Mesh *mesh) {
 
         if (!create_gpu_buffer(&submesh->index_buffer, GPU_BUFFER_TYPE_INDEX, submesh->num_indices * sizeof(u32), 0, submesh->indices, false)) return false;
 
-        submesh->material.albedo_texture = corelib->white_texture;
+        submesh->material.albedo_texture = globals.white_texture;
         if (submesh->material.albedo_texture_name) {
-            submesh->material.albedo_texture = corelib->texture_registry->find_or_load(submesh->material.albedo_texture_name);
+            submesh->material.albedo_texture = globals.texture_registry->find_or_load(submesh->material.albedo_texture_name);
         }
 
-        submesh->material.normal_texture = corelib->white_texture;
+        submesh->material.normal_texture = globals.white_texture;
         if (submesh->material.normal_texture_name) {
-            submesh->material.normal_texture = corelib->texture_registry->find_or_load(submesh->material.normal_texture_name);
+            submesh->material.normal_texture = globals.texture_registry->find_or_load(submesh->material.normal_texture_name);
         }
 
-        submesh->material.metallic_roughness_texture = corelib->white_texture;
+        submesh->material.metallic_roughness_texture = globals.white_texture;
         if (submesh->material.metallic_roughness_texture_name) {
-            submesh->material.metallic_roughness_texture = corelib->texture_registry->find_or_load(submesh->material.metallic_roughness_texture_name);
+            submesh->material.metallic_roughness_texture = globals.texture_registry->find_or_load(submesh->material.metallic_roughness_texture_name);
         }
 
-        submesh->material.ao_texture = corelib->white_texture;
+        submesh->material.ao_texture = globals.white_texture;
         if (submesh->material.ao_texture_name) {
-            submesh->material.ao_texture = corelib->texture_registry->find_or_load(submesh->material.ao_texture_name);
+            submesh->material.ao_texture = globals.texture_registry->find_or_load(submesh->material.ao_texture_name);
         }
     }
 
@@ -112,7 +112,7 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
         info.uniforms.diffuse_color.y = submesh->material.diffuse_color.y * color.y;
         info.uniforms.diffuse_color.z = submesh->material.diffuse_color.z * color.z;
         info.uniforms.diffuse_color.w = submesh->material.diffuse_color.w * color.w;
-        info.uniforms.has_normal_map  = submesh->material.normal_texture != NULL && submesh->material.normal_texture != corelib->white_texture;
+        info.uniforms.has_normal_map  = submesh->material.normal_texture != NULL && submesh->material.normal_texture != globals.white_texture;
         
         render_item(cb, &info);
     }

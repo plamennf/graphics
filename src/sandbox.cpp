@@ -361,8 +361,6 @@ static void draw_imgui_stuff(float dt) {
 }
 
 int main(int argc, char *argv[]) {
-    corelib = new Corelib();
-    
     init_temporary_storage(Megabytes(1));
     
     init_logging();
@@ -375,20 +373,20 @@ int main(int argc, char *argv[]) {
     init_renderer(false);
     imgui_init();
 
-    corelib->white_texture = new Texture();
+    globals.white_texture = new Texture();
     u8 white_texture_data[4] = { 255, 255, 255, 255 };
-    if (!create_texture(corelib->white_texture, 1, 1, TEXTURE_FORMAT_RGBA8, white_texture_data)) return 1;
-    defer { release_texture(corelib->white_texture); };
+    if (!create_texture(globals.white_texture, 1, 1, TEXTURE_FORMAT_RGBA8, white_texture_data)) return 1;
+    defer { release_texture(globals.white_texture); };
     
     if (!init_command_buffer(&cb)) return false;
     
-    corelib->texture_registry = new Texture_Registry();    
-    corelib->mesh_registry    = new Mesh_Registry();
+    globals.texture_registry = new Texture_Registry();    
+    globals.mesh_registry    = new Mesh_Registry();
         
-    mesh = corelib->mesh_registry->find_or_load("Prop_Chair");
+    mesh = globals.mesh_registry->find_or_load("Prop_Chair");
     if (!mesh) return 1;
 
-    cube = corelib->mesh_registry->find_or_load("Cube");
+    cube = globals.mesh_registry->find_or_load("Cube");
     if (!cube) return 1;
 
     platform_window_toggle_fullscreen();

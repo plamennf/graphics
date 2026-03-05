@@ -30,14 +30,7 @@
 #include "mesh_registry.h"
 #include "mesh.h"
 
-struct Corelib {
-    Texture_Registry *texture_registry = NULL;
-    Mesh_Registry    *mesh_registry = NULL;
-
-    Texture *white_texture = NULL;
-};
-
-extern Corelib *corelib;
+#include "sandbox.h"
 
 #ifdef TRACY_ENABLE
 #include <tracy/Tracy.hpp>
