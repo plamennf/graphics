@@ -323,6 +323,8 @@ u64 platform_get_time_in_nanoseconds() {
     return perf_counter.QuadPart * nanoseconds_per_tick;
 }
 
+#ifdef RENDER_OPENGL
+
 //
 // OpenGL
 //
@@ -509,6 +511,8 @@ void opengl_swap_buffers() {
     HDC dc = GetDC(g_hwnd);
     SwapBuffers(dc);
 }
+
+#endif
 
 void platform_show_and_unlock_cursor() {
     // Unlock cursor from any clipping region

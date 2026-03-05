@@ -23,14 +23,16 @@
 #include "mouse.h"
 #include "platform.h"
 
+#ifdef RENDER_OPENGL
 #include "gl_funcs.h"
+#endif
 
 #include "renderer.h"
 #include "texture_registry.h"
 #include "mesh_registry.h"
 #include "mesh.h"
 
-#include "sandbox.h"
+#include "main.h"
 
 #ifdef TRACY_ENABLE
 #include <tracy/Tracy.hpp>

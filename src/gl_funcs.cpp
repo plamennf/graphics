@@ -1,5 +1,7 @@
 #include "pch.h"
 
+#ifdef RENDER_OPENGL
+
 #ifdef PLATFORM_WINDOWS
 #ifdef APIENTRY
 #undef APIENTRY
@@ -744,3 +746,5 @@ void opengl_init_extensions() {
     LoadGLFunc(glMultiDrawElementsIndirectCount);
     LoadGLFunc(glPolygonOffsetClamp);
 }
+
+#endif
