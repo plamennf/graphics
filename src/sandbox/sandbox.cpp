@@ -1,24 +1,14 @@
 #include "pch.h"
-#include "renderer.h"
-#include "mesh.h"
 #include "camera.h"
 
 #include <imgui.h>
 
 #include <stdio.h>
 
-#define DO_SPONZA
-
 Global_Variables globals;
 
-static Mesh *mesh;
-static Mesh *helmet;
-static Mesh *dragon;
-static Mesh *playset;
-static Mesh *suzanne;
-static Mesh *toycar;
-static Mesh *vircity;
 static Mesh *cube;
+static Mesh *mesh;
 static Camera camera;
 
 static Command_Buffer cb;
@@ -31,8 +21,6 @@ struct Shadow_Bounding_Box {
 
 static Shadow_Bounding_Box shadow_bounding_boxes[MAX_SHADOW_CASCADES];
 
-//static Vector3 directional_light_direction = v3(-0.3f, -1.0f, -0.5f);
-//static Vector3 directional_light_direction = v3(0, 0.05f, -1.0f); // Horizon
 static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
 
 static void imgui_init() {
@@ -83,47 +71,6 @@ static void imgui_end_frame() {
 #endif
 }
 
-#if 0
-static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Light *directional_light) {
-    for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
-        float prev_split = (i == 0) ? CAMERA_Z_NEAR : globals.shadow_cascade_splits[i - 1];
-        float curr_split = globals.shadow_cascade_splits[i];
-
-        float min_z = prev_split - camera.position.z;
-        float max_z = curr_split - camera.position.z;
-        
-        Vector3 camera_position = camera.position;
-        Vector3 light_direction = normalize_or_zero(directional_light->direction);
-
-        float s = curr_split;
-        Matrix4 light_proj = make_orthographic(-WORLD_WIDTH, WORLD_WIDTH, -WORLD_DEPTH, WORLD_DEPTH, min_z, max_z);
-        
-        Vector3 light_target; // camera_position - (light_direction * 500.0f);
-        light_target.x = WORLD_WIDTH * 0.5f;
-        light_target.y = WORLD_DEPTH * 0.5f;
-        light_target.z = (max_z - min_z) * 0.5f;
-
-        Vector3 light_eye = light_target + light_direction * 500.0f;
-        
-        Vector3 world_up = (fabsf(light_direction.y) > 0.99f) ? v3(0, 0, 1) : v3(0, 1, 0);
-        world_up = v3(0, 1, 0);
-
-        shadow_bounding_boxes[i].min_x = -WORLD_WIDTH;
-        shadow_bounding_boxes[i].max_x = +WORLD_WIDTH;
-
-        shadow_bounding_boxes[i].min_y = -WORLD_DEPTH;
-        shadow_bounding_boxes[i].max_y = +WORLD_DEPTH;
-
-        shadow_bounding_boxes[i].min_z = min_z;
-        shadow_bounding_boxes[i].max_z = max_z;
-        
-        Matrix4 light_view = make_look_at_matrix(light_eye, light_target, world_up);
-        
-        uniforms->light_matrix[i]   = transpose(light_proj * light_view);
-        uniforms->cascade_splits[i] = { globals.shadow_cascade_splits[i], 0.0f, 0.0f, 0.0f };
-    }
-}
-#else
 static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Light *directional_light) {
     Matrix4 view_matrix = get_view_matrix(&camera);
     Matrix4 inv_view_matrix = inverse(view_matrix);
@@ -190,13 +137,11 @@ static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Lig
             max_z = Max(max_z, frustum_corners_l[j].z);
         }
 
-#if 1
         float world_units_per_texel = (max_x - min_x) / (float)SHADOW_MAP_WIDTH;
         min_x = floorf(min_x / world_units_per_texel) * world_units_per_texel;
         max_x = floorf(max_x / world_units_per_texel) * world_units_per_texel;
         min_y = floorf(min_y / world_units_per_texel) * world_units_per_texel;
         max_y = floorf(max_y / world_units_per_texel) * world_units_per_texel;
-#endif
 
         shadow_bounding_boxes[i].min_x = min_x;
         shadow_bounding_boxes[i].min_y = min_y;
@@ -210,31 +155,15 @@ static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Lig
         
         uniforms->light_matrix[i] = transpose(light_proj * light_view);
 
-        Vector4 view = v4(0, 0, camera.position.z - next_cascade, 1.0f);
-        Vector4 clip = uniforms->view_matrix * view;
-        
-        //uniforms->cascade_splits[i] = v4(clip.z, 0.0f, 0.0f, 0.0f);
         uniforms->cascade_splits[i] = v4(globals.shadow_cascade_splits[i], 0.0f, 0.0f, 0.0f);
     }
 }
-#endif
 
 static void render_scene(Command_Buffer *cb) {
-#ifdef DO_SPONZA
-    render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(0, 0, 1, 1));
-    float scale = 0.025f;
-    render_mesh(cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
-#else
     render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(0, 0, 1, 1));
 
-    render_mesh(cb, mesh,    v3(0, 0, 0), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
-    render_mesh(cb, helmet,  v3(0, 2, -5), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
-    render_mesh(cb, dragon,  v3(0, 0, -15), v3(90, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
-    render_mesh(cb, playset, v3(0, 0, -25), v3(0, 0, 0), v3(5, 5, 5), v4(1, 1, 1, 1));
-    render_mesh(cb, suzanne, v3(0, 2, -35), v3(0, 0, 0), v3(1, 1, 1), v4(1, 1, 1, 1));
-    render_mesh(cb, toycar,  v3(0, 0, -45), v3(90, 0, 0), v3(0.025f, 0.025f, 0.025f), v4(1, 1, 1, 1));
-    render_mesh(cb, vircity, v3(0, 0, -70), v3(0, 0, 0), v3(0.001f, 0.001f, 0.001f), v4(1, 1, 1, 1));
-#endif
+    float scale = 1.0f;
+    render_mesh(cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
 }
 
 static void draw_one_frame() {
@@ -432,6 +361,8 @@ static void draw_imgui_stuff(float dt) {
 }
 
 int main(int argc, char *argv[]) {
+    corelib = new Corelib();
+    
     init_temporary_storage(Megabytes(1));
     
     init_logging();
@@ -444,49 +375,26 @@ int main(int argc, char *argv[]) {
     init_renderer(false);
     imgui_init();
 
+    corelib->white_texture = new Texture();
+    u8 white_texture_data[4] = { 255, 255, 255, 255 };
+    if (!create_texture(corelib->white_texture, 1, 1, TEXTURE_FORMAT_RGBA8, white_texture_data)) return 1;
+    defer { release_texture(corelib->white_texture); };
+    
     if (!init_command_buffer(&cb)) return false;
     
-    globals.texture_registry = new Texture_Registry();    
-    globals.mesh_registry    = new Mesh_Registry();
-    
-    globals.white_texture = new Texture();
-    u8 white_texture_data[4] = { 255, 255, 255, 255 };
-    if (!create_texture(globals.white_texture, 1, 1, TEXTURE_FORMAT_RGBA8, white_texture_data)) return 1;
-    defer { release_texture(globals.white_texture); };
-    
-#ifdef DO_SPONZA
-    mesh = globals.mesh_registry->find_or_load("Sponza");
+    corelib->texture_registry = new Texture_Registry();    
+    corelib->mesh_registry    = new Mesh_Registry();
+        
+    mesh = corelib->mesh_registry->find_or_load("Prop_Chair");
     if (!mesh) return 1;
-#else
-    mesh = globals.mesh_registry->find_or_load("Demon");
-    if (!mesh) return 1;
-    
-    helmet = globals.mesh_registry->find_or_load("DamagedHelmet");
-    if (!helmet) return 1;
 
-    dragon = globals.mesh_registry->find_or_load("DragonAttenuation");
-    if (!dragon) return 1;
-
-    playset = globals.mesh_registry->find_or_load("PlaysetLightTest");
-    if (!playset) return 1;
-
-    suzanne = globals.mesh_registry->find_or_load("Suzanne");
-    if (!suzanne) return 1;
-
-    toycar = globals.mesh_registry->find_or_load("ToyCar");
-    if (!toycar) return 1;
-
-    vircity = globals.mesh_registry->find_or_load("VirtualCity");
-    if (!vircity) return 1;
-#endif
-
-    cube = globals.mesh_registry->find_or_load("Cube");
+    cube = corelib->mesh_registry->find_or_load("Cube");
     if (!cube) return 1;
 
     platform_window_toggle_fullscreen();
     
     bool should_show_cursor = false;
-
+    
     init_camera(&camera, v3(0, 2, 0), 0, 0, 0);
     
     float fixed_update_dt = 1.0f / 60.0f;

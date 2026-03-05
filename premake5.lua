@@ -34,6 +34,7 @@ project "corelib"
     defines {
 		"_CRT_SECURE_NO_WARNINGS",
         "ENABLE_IMGUI",
+        "RENDER_D3D11",
 	}
 
     filter "files:external/src/imgui/**.cpp"

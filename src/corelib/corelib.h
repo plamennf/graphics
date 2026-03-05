@@ -24,3 +24,25 @@
 #include "platform.h"
 
 #include "gl_funcs.h"
+
+#include "renderer.h"
+#include "texture_registry.h"
+#include "mesh_registry.h"
+#include "mesh.h"
+
+struct Corelib {
+    Texture_Registry *texture_registry = NULL;
+    Mesh_Registry    *mesh_registry = NULL;
+
+    Texture *white_texture = NULL;
+};
+
+extern Corelib *corelib;
+
+#ifdef TRACY_ENABLE
+#include <tracy/Tracy.hpp>
+#else
+#define ZoneScoped
+#define ZoneScopedN
+#define FrameMark
+#endif
