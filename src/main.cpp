@@ -21,7 +21,8 @@ struct Shadow_Bounding_Box {
 
 static Shadow_Bounding_Box shadow_bounding_boxes[MAX_SHADOW_CASCADES];
 
-static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
+//static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
+static Vector3 directional_light_direction = v3(-0.5f, -0.2f, 0); // Early morning
 
 static void imgui_init() {
     float main_scale = platform_imgui_get_scale();
@@ -305,7 +306,9 @@ static void draw_imgui_stuff(float dt) {
     ImGui::Begin("Meshes");
     for (const char *name : globals.mesh_registry->all_names_in_order_of_loading) {
         ImGui::PushID(name);
-        ImGui::Selectable(name);
+        if (ImGui::Selectable(name)) {
+            mesh = globals.mesh_registry->find_or_load(name);
+        }
         ImGui::PopID();
     }
     ImGui::End();

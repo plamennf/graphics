@@ -41,43 +41,49 @@ int calculate_cascade_index(float3 world_position, float3 camera_position) {
 
 float pcf_shadow(float3 proj_coords, int cascade_index) {
     float shadow = 0.0;
-
+    float total_weight = 0.0;
+    
     float current_depth = proj_coords.z;
-    float bias = 0.005;
+    float bias = 0.01;
     
     [unroll]
-    for (int x = -1; x <= 1; x++) {
+    for (int x = -3; x <= 3; x++) {
         [unroll]
-        for (int y = - 1; y <= 1; y++) {
+        for (int y = - 3; y <= 3; y++) {
+            float s = 0.0;
             switch (cascade_index) {
                 case 0: {
                     float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
                     float shadow_depth = shadow_textures[0].Sample(sampler_point, proj_coords.xy + offset).r;
-                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                    s = current_depth - bias > shadow_depth ? 0.0 : 1.0;
                 } break;
 
                 case 1: {
                     float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
                     float shadow_depth = shadow_textures[1].Sample(sampler_point, proj_coords.xy + offset).r;
-                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                    s = current_depth - bias > shadow_depth ? 0.0 : 1.0;
                 } break;
 
                 case 2: {
                     float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
                     float shadow_depth = shadow_textures[2].Sample(sampler_point, proj_coords.xy + offset).r;
-                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                    s = current_depth - bias > shadow_depth ? 0.0 : 1.0;
                 } break;
 
                 case 3: {
                     float2 offset = float2(x, y) / float2(SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
                     float shadow_depth = shadow_textures[3].Sample(sampler_point, proj_coords.xy + offset).r;
-                    shadow += current_depth - bias > shadow_depth ? 0.0 : 1.0;
+                    s = current_depth - bias > shadow_depth ? 0.0 : 1.0;
                 } break;
             }
+
+            float weight = 1.0 / (1.0 + length(float2(x, y)));
+            total_weight += weight;
+            shadow += s * weight;
         }
     }
 
-    shadow /= 9.0;
+    shadow /= total_weight;
     return shadow;
 }
 

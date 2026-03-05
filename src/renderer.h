@@ -12,7 +12,7 @@ const int MAX_LIGHTS = 8;
 const int MAX_SHADOW_CASCADES = 4;
 
 const int SHADOW_MAP_WIDTH  = 4096;
-const int SHADOW_MAP_HEIGHT = 4096;
+const int SHADOW_MAP_HEIGHT = SHADOW_MAP_WIDTH;
 
 enum Light_Type : int {
     LIGHT_TYPE_UNKNOWN,
