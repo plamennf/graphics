@@ -47,6 +47,7 @@ cbuffer Per_Subobject_Uniforms : register(b2) {
     float4 material_albedo_factor;
     int has_normal_map;
     float3 material_emissive_factor;
+    float alpha_cutoff;
 }
 
 struct Mesh_Vertex_Input {

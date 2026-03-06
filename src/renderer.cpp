@@ -101,9 +101,13 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
     
     for (int i = 0; i < mesh->num_submeshes; i++) {
         Submesh *submesh = &mesh->submeshes[i];
+
+        if (submesh->material.name && strstr(submesh->material.name, "Shadow")) {
+            continue;
+        }
         
         Render_Item_Info info;
-
+        
         info.vertex_buffer = &submesh->vertex_buffer;
         info.index_buffer  = &submesh->index_buffer;
         info.num_indices   = submesh->num_indices;
@@ -120,6 +124,8 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
         info.uniforms.albedo_factor.w = submesh->material.albedo_factor.w * color.w;
         info.uniforms.has_normal_map  = submesh->material.normal_texture != NULL && submesh->material.normal_texture != globals.white_texture;
         info.uniforms.emissive_factor = submesh->material.emissive_factor;
+
+        info.uniforms.alpha_cutoff = submesh->material.alpha_cutoff;
         
         render_item(cb, &info);
     }

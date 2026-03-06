@@ -8,6 +8,7 @@
 Global_Variables globals;
 
 static Mesh *cube;
+static Mesh *building;
 static Mesh *mesh;
 static Camera camera;
 
@@ -164,7 +165,10 @@ static void render_scene(Command_Buffer *cb) {
     render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(1, 1, 1, 1));
 
     float scale = 10.0f;
-    render_mesh(cb, mesh, v3(0, 0.1f, -10), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
+    render_mesh(cb, building, v3(0, 0.1f, -10), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
+
+    scale = 1.0f;
+    render_mesh(cb, mesh, v3(0, 0, 10), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
 }
 
 static void draw_one_frame() {
@@ -353,12 +357,15 @@ int main(int argc, char *argv[]) {
     //mesh = globals.mesh_registry->find_or_load("Prop_Chair");
     //mesh = globals.mesh_registry->find_or_load("Acura");
     //mesh = globals.mesh_registry->find_or_load("Zoro");
-    mesh = globals.mesh_registry->find_or_load("Victorian");
-    if (!mesh) return 1;
+    building = globals.mesh_registry->find_or_load("Victorian");
+    if (!building) return 1;
 
     cube = globals.mesh_registry->find_or_load("Cube");
     if (!cube) return 1;
 
+    mesh = globals.mesh_registry->find_or_load("Zoro");
+    if (!mesh) return 1;
+    
     platform_window_toggle_fullscreen();
     
     bool should_show_cursor = false;

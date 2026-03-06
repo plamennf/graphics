@@ -147,7 +147,10 @@ float3 fresnel_schlick(float cos_theta, float3 F0) {
 
 // From https://learnopengl.com/PBR/Lighting
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
-    float3 albedo    = albedo_texture.Sample(sampler_linear, input.uv).rgb * material_albedo_factor.xyz; // * input.color.rgb
+    float4 full_albedo = albedo_texture.Sample(sampler_linear, input.uv);
+    if (full_albedo.a < alpha_cutoff) discard;
+    float3 albedo    = full_albedo.rgb * material_albedo_factor.xyz; // * input.color.rgb
+    
     float3 normal    = input.normal;//get_normal_from_normal_map();
     float metallic   = metallic_roughness_texture.Sample(sampler_linear, input.uv).b;
     float roughness  = metallic_roughness_texture.Sample(sampler_linear, input.uv).g;

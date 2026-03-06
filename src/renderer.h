@@ -96,6 +96,8 @@ struct Per_Subobject_Uniforms {
     Vector4 albedo_factor;
     int has_normal_map;
     Vector3 emissive_factor;
+    float alpha_cutoff;
+    float padding[3];
 };
 
 struct Render_Item_Info {

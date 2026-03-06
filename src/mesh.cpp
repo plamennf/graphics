@@ -60,15 +60,46 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
     }
     
     mesh->num_submeshes = 0;
-    for (int i = 0; i < data->meshes_count; i++) {
-        mesh->num_submeshes += (int)data->meshes[i].primitives_count;
+    for (int i = 0; i < data->nodes_count; i++) {
+        cgltf_node *node = &data->nodes[i];
+        if (!node->mesh) continue;
+        
+        if (node->name) {
+            if (strstr(node->name, "Plane") || strstr(node->name, "Proxy") || strstr(node->name, "Shadow")) {
+                continue; 
+            }
+        }
+        
+        cgltf_mesh *gltf_mesh = data->nodes[i].mesh;
+        if (gltf_mesh) {
+            mesh->num_submeshes += (int)gltf_mesh->primitives_count;
+        }
     }
 
     mesh->submeshes = new Submesh[mesh->num_submeshes];
 
     int index = 0;
-    for (int m = 0; m < data->meshes_count; m++) {
-        cgltf_mesh *gltf_mesh = &data->meshes[m];
+    for (int n = 0; n < data->nodes_count; n++) {
+        cgltf_node *node = &data->nodes[n];
+        if (!node->mesh) continue;
+
+        if (node->name) {
+            if (strstr(node->name, "Plane") || strstr(node->name, "Proxy") || strstr(node->name, "Shadow")) {
+                continue; 
+            }
+        }
+
+        float fmatrix[16];
+        cgltf_node_transform_world(node, fmatrix);
+
+        Matrix4 matrix;
+        for (int y = 0; y < 4; y++) {
+            for (int x = 0; x < 4; x++) {
+                matrix.e[x][y] = fmatrix[y * 4 + x];
+            }
+        }
+        
+        cgltf_mesh *gltf_mesh = node->mesh;
         for (int p = 0; p < gltf_mesh->primitives_count; p++) {
             cgltf_primitive *primitive = &gltf_mesh->primitives[p];
             Submesh *submesh = &mesh->submeshes[index++];
@@ -120,8 +151,9 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                 if (tangent) cgltf_accessor_read_float(tangent, i, t_, 3);
                 if (color)   cgltf_accessor_read_float(color,   i, c_, 4);
 
-                submesh->vertices[i].position = v3(p_[0], p_[1], p_[2]);
-
+                Vector4 position4 = matrix * v4(p_[0], p_[1], p_[2], 1.0f);
+                submesh->vertices[i].position = v3(position4.x, position4.y, position4.z);
+                
                 if (color) {
                     submesh->vertices[i].color     = v4(c_[0], c_[1], c_[2], c_[3]);
                 } else {
@@ -129,7 +161,8 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                 }
                 
                 if (normal) {
-                    submesh->vertices[i].normal    = v3(n_[0], n_[1], n_[2]);
+                    Vector4 normal4 = matrix * v4(n_[0], n_[1], n_[2], 0.0f);
+                    submesh->vertices[i].normal    = v3(normal4.x, normal4.y, normal4.z);
                 } else {
                     submesh->vertices[i].normal    = v3(0, 1, 0);
                 }
@@ -160,13 +193,15 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
             }
 
             /*
-            submesh->vertex_buffer = make_gpu_buffer(GPU_BUFFER_VERTEX, submesh->num_vertices * sizeof(Mesh_Vertex), submesh->vertices, false);
-            submesh->index_buffer = make_gpu_buffer(GPU_BUFFER_INDEX, submesh->num_indices * sizeof(u32), submesh->indices, false);
+              submesh->vertex_buffer = make_gpu_buffer(GPU_BUFFER_VERTEX, submesh->num_vertices * sizeof(Mesh_Vertex), submesh->vertices, false);
+              submesh->index_buffer = make_gpu_buffer(GPU_BUFFER_INDEX, submesh->num_indices * sizeof(u32), submesh->indices, false);
             */
             
             if (primitive->material) {
                 cgltf_material *material = primitive->material;
 
+                submesh->material.name = copy_string(material->name);
+                
                 submesh->material.albedo_factor = v4(1, 1, 1, 1);
 
                 if (material->has_pbr_specular_glossiness) {
@@ -214,6 +249,10 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
 
                     float *e = material->emissive_factor;
                     submesh->material.emissive_factor = v3(e[0], e[1], e[2]);
+                }
+
+                if (material->alpha_mode == cgltf_alpha_mode_mask) {
+                    submesh->material.alpha_cutoff = material->alpha_cutoff;
                 }
             }
         }
