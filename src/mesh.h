@@ -18,6 +18,7 @@ struct Gpu_Buffer;
 
 struct Material {
     char *name = NULL;
+    bool uses_specular_glossiness = false;
     
     char *albedo_texture_name = NULL;
     Texture *albedo_texture = NULL;
@@ -35,8 +36,6 @@ struct Material {
     char *emissive_texture_name = NULL;
     Texture *emissive_texture = NULL;
     Vector3 emissive_factor = v3(0, 0, 0);
-
-    float alpha_cutoff = 0.0f;
 };
 
 struct Submesh {

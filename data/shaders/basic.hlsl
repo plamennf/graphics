@@ -2,7 +2,7 @@
 
 struct Vertex_Output {
     float4 position : SV_POSITION;
-    float4 color    : COOLR;
+    float4 color    : COLOR;
     float2 uv       : TEXCOORD;
     float3 normal   : NORMAL;
     float3 world_position : POSITION;
@@ -148,12 +148,26 @@ float3 fresnel_schlick(float cos_theta, float3 F0) {
 // From https://learnopengl.com/PBR/Lighting
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
     float4 full_albedo = albedo_texture.Sample(sampler_linear, input.uv);
-    if (full_albedo.a < alpha_cutoff) discard;
     float3 albedo    = full_albedo.rgb * material_albedo_factor.xyz; // * input.color.rgb
     
     float3 normal    = input.normal;//get_normal_from_normal_map();
-    float metallic   = metallic_roughness_texture.Sample(sampler_linear, input.uv).b;
-    float roughness  = metallic_roughness_texture.Sample(sampler_linear, input.uv).g;
+
+    float4 full_mr = metallic_roughness_texture.Sample(sampler_linear, input.uv);
+    float metallic;
+    float roughness;
+    float3 F0;
+    if (uses_specular_glossiness) {
+        roughness = 1.0 - full_mr.a;
+        metallic  = 0.0;
+
+        F0 = full_mr.rgb;
+    } else {
+        roughness = full_mr.g;
+        metallic  = full_mr.b;
+
+        F0 = float3(0.04, 0.04, 0.04);
+        F0 = lerp(F0, albedo, metallic);
+    }
     float ao         = ao_texture.Sample(sampler_linear, input.uv).r;
     float3 emissive  = emissive_texture.Sample(sampler_linear, input.uv).rgb * material_emissive_factor;
     
@@ -167,9 +181,6 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
 
         N = normalize(mul(input.TBN, normal));
     }
-    
-    float3 F0 = float3(0.04, 0.04, 0.04);
-    F0 = lerp(F0, albedo, metallic);
 
     int cascade_index = calculate_cascade_index(input.world_position, camera_position);
     float shadow = calculate_shadow(cascade_index, input.world_position);

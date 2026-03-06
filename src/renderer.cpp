@@ -125,7 +125,7 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
         info.uniforms.has_normal_map  = submesh->material.normal_texture != NULL && submesh->material.normal_texture != globals.white_texture;
         info.uniforms.emissive_factor = submesh->material.emissive_factor;
 
-        info.uniforms.alpha_cutoff = submesh->material.alpha_cutoff;
+        info.uniforms.uses_specular_glossiness = submesh->material.uses_specular_glossiness ? 1 : 0;
         
         render_item(cb, &info);
     }

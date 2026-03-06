@@ -206,36 +206,39 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
 
                 if (material->has_pbr_specular_glossiness) {
                     float *d = material->pbr_specular_glossiness.diffuse_factor;
-
-                    if (d[0] != 0.0f || d[1] != 0.0f || d[2] != 0.0f) {
-                        submesh->material.albedo_factor = v4(d[0], d[1], d[2], d[3]);
-                    }
+                    submesh->material.albedo_factor = v4(d[0], d[1], d[2], d[3]);
 
                     if (material->pbr_specular_glossiness.diffuse_texture.texture) {
                         cgltf_texture *texture = material->pbr_specular_glossiness.diffuse_texture.texture;
                         submesh->material.albedo_texture_name = get_texture_name(texture);
                     }
+
+                    if (material->pbr_specular_glossiness.specular_glossiness_texture.texture) {
+                        cgltf_texture *texture = material->pbr_specular_glossiness.specular_glossiness_texture.texture;
+                        submesh->material.metallic_roughness_texture_name = get_texture_name(texture);
+                    }
+
+                    submesh->material.uses_specular_glossiness = true;
                 } else if (material->has_pbr_metallic_roughness) {
                     float *b = material->pbr_metallic_roughness.base_color_factor;
-
-                    if (b[0] != 0.0f || b[1] != 0.0f || b[2] != 0.0f) {
-                        submesh->material.albedo_factor = v4(b[0], b[1], b[2], b[3]);
-                    }
+                    submesh->material.albedo_factor = v4(b[0], b[1], b[2], b[3]);
                     
                     if (material->pbr_metallic_roughness.base_color_texture.texture) {
                         cgltf_texture *texture = material->pbr_metallic_roughness.base_color_texture.texture;
                         submesh->material.albedo_texture_name = get_texture_name(texture);
                     }
+
+                    if (material->pbr_metallic_roughness.metallic_roughness_texture.texture) {
+                        cgltf_texture *texture = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
+                        submesh->material.metallic_roughness_texture_name = get_texture_name(texture);
+                    }
+
+                    submesh->material.uses_specular_glossiness = false;
                 }
                 
                 if (material->normal_texture.texture) {
                     cgltf_texture *texture = material->normal_texture.texture;
                     submesh->material.normal_texture_name = get_texture_name(texture);
-                }
-
-                if (material->pbr_metallic_roughness.metallic_roughness_texture.texture) {
-                    cgltf_texture *texture = material->pbr_metallic_roughness.metallic_roughness_texture.texture;
-                    submesh->material.metallic_roughness_texture_name = get_texture_name(texture);
                 }
 
                 if (material->occlusion_texture.texture) {
@@ -249,10 +252,6 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
 
                     float *e = material->emissive_factor;
                     submesh->material.emissive_factor = v3(e[0], e[1], e[2]);
-                }
-
-                if (material->alpha_mode == cgltf_alpha_mode_mask) {
-                    submesh->material.alpha_cutoff = material->alpha_cutoff;
                 }
             }
         }

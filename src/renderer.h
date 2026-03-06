@@ -96,7 +96,7 @@ struct Per_Subobject_Uniforms {
     Vector4 albedo_factor;
     int has_normal_map;
     Vector3 emissive_factor;
-    float alpha_cutoff;
+    int uses_specular_glossiness;
     float padding[3];
 };
 
