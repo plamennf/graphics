@@ -193,42 +193,42 @@ static void draw_one_frame() {
     l0.type = LIGHT_TYPE_POINT;
     l0.position = v3(0.0f, 32.0f, 0.0f);
     l0.color = v3(1.0f, 0.85f, 0.7f);
-    l0.intensity = 40.0f;
+    l0.intensity = 8.0f;
     l0.range = 60.0f;
 
     Light l1 = {};
     l1.type = LIGHT_TYPE_POINT;
     l1.position = v3(-30.0f, 15.0f, 0.0f);
     l1.color = v3(0.4f, 0.6f, 1.0f);
-    l1.intensity = 20.0f;
+    l1.intensity = 4.0f;
     l1.range = 45.0f;
 
     Light l2 = {};
     l2.type = LIGHT_TYPE_POINT;
     l2.position = v3(30.0f, 12.0f, -10.0f);
     l2.color = v3(1.0f, 1.0f, 1.0f);
-    l2.intensity = 50.0f;
+    l2.intensity = 10.0f;
     l2.range = 40.0f;
 
     Light l3 = {};
     l3.type = LIGHT_TYPE_POINT;
     l3.position = v3(0.0f, 10.0f, -25.0f);
     l3.color = v3(1.0f, 0.95f, 0.8f);
-    l3.intensity = 10.0f;
+    l3.intensity = 3.0f;
     l3.range = 50.0f;
 
     Light l4 = {};
     l4.type = LIGHT_TYPE_POINT;
     l4.position = v3(-15.0f, 10.0f, 20.0f);
     l4.color = v3(0.6f, 0.7f, 1.0f);
-    l4.intensity = 15.0f;
+    l4.intensity = 4.0f;
     l4.range = 35.0f;
 
     Light l5 = {};
     l5.type = LIGHT_TYPE_POINT;
     l5.position = v3(20.0f, 18.0f, 10.0f);
     l5.color = v3(1.0f, 0.9f, 0.75f);
-    l5.intensity = 20.0f;
+    l5.intensity = 5.0f;
     l5.range = 40.0f;
 
     Light spot_light = {};

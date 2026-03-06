@@ -148,7 +148,7 @@ float3 fresnel_schlick(float cos_theta, float3 F0) {
 // From https://learnopengl.com/PBR/Lighting
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
     float4 full_albedo = albedo_texture.Sample(sampler_linear, input.uv);
-    float3 albedo    = full_albedo.rgb * material_albedo_factor.xyz; // * input.color.rgb
+    float3 albedo    = full_albedo.rgb * material_albedo_factor.xyz * input.color.rgb;
     
     float3 normal    = input.normal;//get_normal_from_normal_map();
 
@@ -218,6 +218,7 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
 
             default: {
                 L = float3(0.0, 0.0, 0.0);
+                continue;
             } break;
         }
         

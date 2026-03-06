@@ -99,14 +99,20 @@ static void init_back_buffer() {
 
         shadow_maps_created = true;
     }
-        
+
+    bool do_hdr = true;
+    
     texture_desc.Width     = platform_window_width;
     texture_desc.Height    = platform_window_height;
-    texture_desc.Format    = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    if (do_hdr) {
+        texture_desc.Format    = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    } else {
+        texture_desc.Format    = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+    }
     texture_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     device->CreateTexture2D(&texture_desc, NULL, &offscreen_render_target.texture);
 
-    rtv_desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+    rtv_desc.Format = texture_desc.Format;
     device->CreateRenderTargetView(offscreen_render_target.texture, &rtv_desc, &offscreen_render_target.rtv);
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
