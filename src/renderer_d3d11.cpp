@@ -487,32 +487,37 @@ bool load_shader(Shader *shader, String _filename, Render_Vertex_Type vertex_typ
     switch (vertex_type) {
         case RENDER_VERTEX_TYPE_MESH: {
             if (!mesh_vertex_input_layout) {
-                D3D11_INPUT_ELEMENT_DESC ieds[5] = {};
+                D3D11_INPUT_ELEMENT_DESC ieds[6] = {};
                 
                 ieds[0].SemanticName      = "POSITION";
                 ieds[0].Format            = DXGI_FORMAT_R32G32B32_FLOAT;
                 ieds[0].AlignedByteOffset = offsetof(Mesh_Vertex, position);
                 ieds[0].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
 
-                ieds[1].SemanticName      = "TEXCOORD";
-                ieds[1].Format            = DXGI_FORMAT_R32G32_FLOAT;
-                ieds[1].AlignedByteOffset = offsetof(Mesh_Vertex, uv);
+                ieds[1].SemanticName      = "COLOR";
+                ieds[1].Format            = DXGI_FORMAT_R32G32B32A32_FLOAT;
+                ieds[1].AlignedByteOffset = offsetof(Mesh_Vertex, color);
                 ieds[1].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
 
-                ieds[2].SemanticName      = "NORMAL";
-                ieds[2].Format            = DXGI_FORMAT_R32G32B32_FLOAT;
-                ieds[2].AlignedByteOffset = offsetof(Mesh_Vertex, normal);
+                ieds[2].SemanticName      = "TEXCOORD";
+                ieds[2].Format            = DXGI_FORMAT_R32G32_FLOAT;
+                ieds[2].AlignedByteOffset = offsetof(Mesh_Vertex, uv);
                 ieds[2].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
 
-                ieds[3].SemanticName      = "TANGENT";
+                ieds[3].SemanticName      = "NORMAL";
                 ieds[3].Format            = DXGI_FORMAT_R32G32B32_FLOAT;
-                ieds[3].AlignedByteOffset = offsetof(Mesh_Vertex, tangent);
+                ieds[3].AlignedByteOffset = offsetof(Mesh_Vertex, normal);
                 ieds[3].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
 
-                ieds[4].SemanticName      = "BITANGENT";
+                ieds[4].SemanticName      = "TANGENT";
                 ieds[4].Format            = DXGI_FORMAT_R32G32B32_FLOAT;
-                ieds[4].AlignedByteOffset = offsetof(Mesh_Vertex, bitangent);
+                ieds[4].AlignedByteOffset = offsetof(Mesh_Vertex, tangent);
                 ieds[4].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
+
+                ieds[5].SemanticName      = "BITANGENT";
+                ieds[5].Format            = DXGI_FORMAT_R32G32B32_FLOAT;
+                ieds[5].AlignedByteOffset = offsetof(Mesh_Vertex, bitangent);
+                ieds[5].InputSlotClass    = D3D11_INPUT_PER_VERTEX_DATA;
 
                 if (device->CreateInputLayout(ieds, ArrayCount(ieds), vertex_data, vertex_data_size, &mesh_vertex_input_layout) != S_OK) {
                     logprintf("Failed to create mesh vertex input layout with shader '%s'\n", vertex_full_path);
@@ -719,6 +724,7 @@ void render_item(Command_Buffer *cb, Render_Item_Info *info) {
     set_texture(cb, TEXTURE_NORMAL, info->normal_texture);
     set_texture(cb, TEXTURE_METALLIC_ROUGHNESS, info->metallic_roughness_texture);
     set_texture(cb, TEXTURE_AO,                 info->ao_texture);
+    set_texture(cb, TEXTURE_EMISSIVE,           info->emissive_texture);
 
     D3D11_MAPPED_SUBRESOURCE msr;
     cb->context->Map(cb->per_subobject_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);

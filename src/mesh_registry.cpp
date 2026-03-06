@@ -50,8 +50,11 @@ Mesh *Mesh_Registry::find_or_load(const char *name) {
     snprintf(full_path, sizeof(full_path), "data/meshes/%s.gltf", name);
 
     if (!file_exists(full_path)) {
-        logprintf("No mesh '%s' found in 'data/meshes'\n", name);
-        return NULL;
+        snprintf(full_path, sizeof(full_path), "data/meshes/%s.glb", name);
+        if (!file_exists(full_path)) {
+            logprintf("No mesh '%s' found in 'data/meshes'\n", name);
+            return NULL;
+        }
     }
 
 #endif

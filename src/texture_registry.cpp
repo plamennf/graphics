@@ -20,6 +20,7 @@ Texture *Texture_Registry::find_or_load(const char *name) {
     const char *extensions[] = {
         "png",
         "jpg",
+        "jpeg",
         "bmp",
     };
 

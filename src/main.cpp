@@ -161,10 +161,10 @@ static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Lig
 }
 
 static void render_scene(Command_Buffer *cb) {
-    render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(0, 0, 1, 1));
+    render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(1, 1, 1, 1));
 
-    float scale = 1.0f;
-    render_mesh(cb, mesh, v3(0, 0, 0), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
+    float scale = 10.0f;
+    render_mesh(cb, mesh, v3(0, 0.1f, -10), v3(0, 0, 0), v3(scale, scale, scale), v4(1, 1, 1, 1));
 }
 
 static void draw_one_frame() {
@@ -180,7 +180,8 @@ static void draw_one_frame() {
     sun.type      = LIGHT_TYPE_DIRECTIONAL;
     sun.direction = normalize_or_zero(directional_light_direction);
     sun.color     = v3(1.0f, 0.95f, 0.85f);
-    sun.intensity = 1.2f;
+    //sun.intensity = 1.2f;
+    sun.intensity = 10.0f;
 
     update_shadow_map_cascade_matrices(&per_scene_uniforms, &sun);
     
@@ -349,7 +350,10 @@ int main(int argc, char *argv[]) {
     globals.mesh_registry    = new Mesh_Registry();
     globals.mesh_registry->recursive_init_all();
         
-    mesh = globals.mesh_registry->find_or_load("Prop_Chair");
+    //mesh = globals.mesh_registry->find_or_load("Prop_Chair");
+    //mesh = globals.mesh_registry->find_or_load("Acura");
+    //mesh = globals.mesh_registry->find_or_load("Zoro");
+    mesh = globals.mesh_registry->find_or_load("Victorian");
     if (!mesh) return 1;
 
     cube = globals.mesh_registry->find_or_load("Cube");

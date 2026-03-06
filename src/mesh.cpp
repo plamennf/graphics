@@ -77,6 +77,7 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
             cgltf_accessor *normal   = NULL;
             cgltf_accessor *uv       = NULL;
             cgltf_accessor *tangent  = NULL;
+            cgltf_accessor *color    = NULL;
             for (int a = 0; a < primitive->attributes_count; a++) {
                 switch (primitive->attributes[a].type) {
                     case cgltf_attribute_type_position: {
@@ -96,6 +97,10 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                     case cgltf_attribute_type_tangent: {
                         tangent = primitive->attributes[a].data;
                     } break;
+
+                    case cgltf_attribute_type_color: {
+                        color = primitive->attributes[a].data;
+                    } break;
                 }
             }
             if (!position) continue;
@@ -108,13 +113,21 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                 float n_[3] = {};
                 float u_[2] = {};
                 float t_[3] = {};
+                float c_[4] = {};
                 cgltf_accessor_read_float(position, i, p_, 3);
                 if (normal)  cgltf_accessor_read_float(normal,  i, n_, 3);
                 if (uv)      cgltf_accessor_read_float(uv,      i, u_, 2);
                 if (tangent) cgltf_accessor_read_float(tangent, i, t_, 3);
+                if (color)   cgltf_accessor_read_float(color,   i, c_, 4);
 
                 submesh->vertices[i].position = v3(p_[0], p_[1], p_[2]);
 
+                if (color) {
+                    submesh->vertices[i].color     = v4(c_[0], c_[1], c_[2], c_[3]);
+                } else {
+                    submesh->vertices[i].color     = v4(1, 1, 1, 1);
+                }
+                
                 if (normal) {
                     submesh->vertices[i].normal    = v3(n_[0], n_[1], n_[2]);
                 } else {
@@ -154,11 +167,32 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
             if (primitive->material) {
                 cgltf_material *material = primitive->material;
 
-                if (material->pbr_metallic_roughness.base_color_texture.texture) {
-                    cgltf_texture *texture = material->pbr_metallic_roughness.base_color_texture.texture;
-                    submesh->material.albedo_texture_name = get_texture_name(texture);
-                }
+                submesh->material.albedo_factor = v4(1, 1, 1, 1);
 
+                if (material->has_pbr_specular_glossiness) {
+                    float *d = material->pbr_specular_glossiness.diffuse_factor;
+
+                    if (d[0] != 0.0f || d[1] != 0.0f || d[2] != 0.0f) {
+                        submesh->material.albedo_factor = v4(d[0], d[1], d[2], d[3]);
+                    }
+
+                    if (material->pbr_specular_glossiness.diffuse_texture.texture) {
+                        cgltf_texture *texture = material->pbr_specular_glossiness.diffuse_texture.texture;
+                        submesh->material.albedo_texture_name = get_texture_name(texture);
+                    }
+                } else if (material->has_pbr_metallic_roughness) {
+                    float *b = material->pbr_metallic_roughness.base_color_factor;
+
+                    if (b[0] != 0.0f || b[1] != 0.0f || b[2] != 0.0f) {
+                        submesh->material.albedo_factor = v4(b[0], b[1], b[2], b[3]);
+                    }
+                    
+                    if (material->pbr_metallic_roughness.base_color_texture.texture) {
+                        cgltf_texture *texture = material->pbr_metallic_roughness.base_color_texture.texture;
+                        submesh->material.albedo_texture_name = get_texture_name(texture);
+                    }
+                }
+                
                 if (material->normal_texture.texture) {
                     cgltf_texture *texture = material->normal_texture.texture;
                     submesh->material.normal_texture_name = get_texture_name(texture);
@@ -172,6 +206,14 @@ bool load_mesh_gltf(Mesh *mesh, String _filepath) {
                 if (material->occlusion_texture.texture) {
                     cgltf_texture *texture = material->occlusion_texture.texture;
                     submesh->material.ao_texture_name = get_texture_name(texture);
+                }
+
+                if (material->emissive_texture.texture) {
+                    cgltf_texture *texture = material->emissive_texture.texture;
+                    submesh->material.emissive_texture_name = get_texture_name(texture);
+
+                    float *e = material->emissive_factor;
+                    submesh->material.emissive_factor = v3(e[0], e[1], e[2]);
                 }
             }
         }
@@ -242,8 +284,7 @@ bool save_mesh(Mesh *mesh, String _filepath) {
         }
 #endif
         
-        fwrite(&submesh->material.diffuse_color.x, sizeof(float), 4, file);
-        fwrite(&submesh->material.shininess, sizeof(float), 1, file);
+        fwrite(&submesh->material.albedo_factor.x, sizeof(float), 4, file);
     }
 
     fclose(file);
@@ -331,8 +372,7 @@ bool load_mesh_custom(Mesh *mesh, String _filepath) {
         }
 #endif
 
-        fread(&submesh->material.diffuse_color.x, sizeof(float), 4, file);
-        fread(&submesh->material.shininess, sizeof(float), 1, file);
+        fread(&submesh->material.albedo_factor.x, sizeof(float), 4, file);
     }
     
     fclose(file);

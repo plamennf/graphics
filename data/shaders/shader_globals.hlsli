@@ -44,12 +44,14 @@ cbuffer Per_Object_Uniforms : register(b1) {
 }
 
 cbuffer Per_Subobject_Uniforms : register(b2) {
-    float4 material_diffuse_color;
+    float4 material_albedo_factor;
     int has_normal_map;
+    float3 material_emissive_factor;
 }
 
 struct Mesh_Vertex_Input {
     float3 position  : POSITION;
+    float4 color     : COLOR;
     float2 uv        : TEXCOORD;
     float3 normal    : NORMAL;
     float3 tangent   : TANGENT;
@@ -69,4 +71,5 @@ Texture2D albedo_texture : register(t0);
 Texture2D normal_texture : register(t1);
 Texture2D metallic_roughness_texture : register(t2);
 Texture2D ao_texture : register(t3);
-Texture2D shadow_textures[MAX_SHADOW_CASCADES] : register(t4);
+Texture2D emissive_texture : register(t4);
+Texture2D shadow_textures[MAX_SHADOW_CASCADES] : register(t5);

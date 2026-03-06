@@ -2,6 +2,7 @@
 
 struct Vertex_Output {
     float4 position : SV_POSITION;
+    float4 color    : COOLR;
     float2 uv       : TEXCOORD;
     float3 normal   : NORMAL;
     float3 world_position : POSITION;
@@ -14,8 +15,9 @@ Vertex_Output vertex_main(Mesh_Vertex_Input input) {
     float4 world_position = mul(world_matrix, float4(input.position, 1.0));
     result.world_position = world_position.xyz;
     result.position = mul(projection_matrix, mul(view_matrix, world_position));
+    result.color    = input.color;
     result.uv       = float2(input.uv.x, 1.0 - input.uv.y);
-    result.normal   = input.normal;
+    result.normal   = mul(world_matrix, float4(input.normal, 0.0)).xyz;
 
     float3 T = normalize(mul(world_matrix, float4(input.tangent, 0.0)).xyz);
     float3 N = normalize(mul(world_matrix, float4(input.normal,  0.0)).xyz);
@@ -145,20 +147,22 @@ float3 fresnel_schlick(float cos_theta, float3 F0) {
 
 // From https://learnopengl.com/PBR/Lighting
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
-    float3 albedo    = albedo_texture.Sample(sampler_linear, input.uv).rgb;
+    float3 albedo    = albedo_texture.Sample(sampler_linear, input.uv).rgb * material_albedo_factor.xyz; // * input.color.rgb
     float3 normal    = input.normal;//get_normal_from_normal_map();
     float metallic   = metallic_roughness_texture.Sample(sampler_linear, input.uv).b;
     float roughness  = metallic_roughness_texture.Sample(sampler_linear, input.uv).g;
     float ao         = ao_texture.Sample(sampler_linear, input.uv).r;
-
+    float3 emissive  = emissive_texture.Sample(sampler_linear, input.uv).rgb * material_emissive_factor;
+    
     float3 N = normalize(normal);
     float3 V = normalize(camera_position - input.world_position);
 
     if (has_normal_map == 1) {
         normal = normal_texture.Sample(sampler_linear, input.uv).xyz;
+        normal = normal * 2.0 - 1.0;
         normal = normalize(normal);
 
-        V = mul(input.TBN, V);
+        N = normalize(mul(input.TBN, normal));
     }
     
     float3 F0 = float3(0.04, 0.04, 0.04);
@@ -173,9 +177,11 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
         float3 L;
         float attenuation = 1.0;
 
+        float s = 1.0;
         switch (lights[i].type) {
             case LIGHT_TYPE_DIRECTIONAL: {
                 L = normalize(-lights[i].direction);
+                s = shadow;
             } break;
 
             case LIGHT_TYPE_POINT: {
@@ -217,12 +223,11 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
         float3 specular   = numerator / denominator;
 
         float NdotL = max(dot(N, L), 0.0);
-        Lo += ((kD * albedo / PI + specular) * radiance * NdotL) * shadow;
+        Lo += ((kD * albedo / PI + specular) * radiance * NdotL) * s;
     }
 
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
-    float3 color   = ambient + Lo;
-    color = color / (color + float3(1.0, 1.0, 1.0));
+    float3 color   = ambient + Lo + emissive;
     
     return float4(color, 1.0);
 }

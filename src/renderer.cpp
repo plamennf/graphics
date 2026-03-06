@@ -81,6 +81,11 @@ bool generate_gpu_data_for_mesh(Mesh *mesh) {
         if (submesh->material.ao_texture_name) {
             submesh->material.ao_texture = globals.texture_registry->find_or_load(submesh->material.ao_texture_name);
         }
+
+        submesh->material.emissive_texture = globals.white_texture;
+        if (submesh->material.emissive_texture_name) {
+            submesh->material.emissive_texture = globals.texture_registry->find_or_load(submesh->material.emissive_texture_name);
+        }
     }
 
     return true;
@@ -107,12 +112,14 @@ void render_mesh(Command_Buffer *cb, Mesh *mesh, Vector3 position, Vector3 rotat
         info.normal_texture = submesh->material.normal_texture;
         info.metallic_roughness_texture = submesh->material.metallic_roughness_texture;
         info.ao_texture                 = submesh->material.ao_texture;
+        info.emissive_texture           = submesh->material.emissive_texture;
         
-        info.uniforms.diffuse_color.x = submesh->material.diffuse_color.x * color.x;
-        info.uniforms.diffuse_color.y = submesh->material.diffuse_color.y * color.y;
-        info.uniforms.diffuse_color.z = submesh->material.diffuse_color.z * color.z;
-        info.uniforms.diffuse_color.w = submesh->material.diffuse_color.w * color.w;
+        info.uniforms.albedo_factor.x = submesh->material.albedo_factor.x * color.x;
+        info.uniforms.albedo_factor.y = submesh->material.albedo_factor.y * color.y;
+        info.uniforms.albedo_factor.z = submesh->material.albedo_factor.z * color.z;
+        info.uniforms.albedo_factor.w = submesh->material.albedo_factor.w * color.w;
         info.uniforms.has_normal_map  = submesh->material.normal_texture != NULL && submesh->material.normal_texture != globals.white_texture;
+        info.uniforms.emissive_factor = submesh->material.emissive_factor;
         
         render_item(cb, &info);
     }

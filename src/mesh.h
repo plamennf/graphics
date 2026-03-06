@@ -6,6 +6,7 @@
 
 struct Mesh_Vertex {
     Vector3 position;
+    Vector4 color;
     Vector2 uv;
     Vector3 normal;
     Vector3 tangent;
@@ -25,7 +26,8 @@ struct Material {
 
     char *albedo_texture_name = NULL;
     Texture *albedo_texture = NULL;
-
+    Vector4 albedo_factor = v4(1, 1, 1, 1);
+    
     char *normal_texture_name = NULL;
     Texture *normal_texture = NULL;
 
@@ -34,9 +36,10 @@ struct Material {
 
     char *ao_texture_name = NULL;
     Texture *ao_texture = NULL;
-    
-    Vector4 diffuse_color;
-    float shininess;
+
+    char *emissive_texture_name = NULL;
+    Texture *emissive_texture = NULL;
+    Vector3 emissive_factor = v3(0, 0, 0);
 };
 
 struct Submesh {

@@ -93,9 +93,9 @@ struct Per_Object_Uniforms {
 };
 
 struct Per_Subobject_Uniforms {
-    Vector4 diffuse_color;
+    Vector4 albedo_factor;
     int has_normal_map;
-    float padding[3];
+    Vector3 emissive_factor;
 };
 
 struct Render_Item_Info {
@@ -107,6 +107,7 @@ struct Render_Item_Info {
     Texture *normal_texture;
     Texture *metallic_roughness_texture;
     Texture *ao_texture;
+    Texture *emissive_texture;
     
     Per_Subobject_Uniforms uniforms;
 };
@@ -122,6 +123,7 @@ enum Texture_Type {
     TEXTURE_NORMAL,
     TEXTURE_METALLIC_ROUGHNESS,
     TEXTURE_AO,
+    TEXTURE_EMISSIVE,
     TEXTURE_SHADOW_MAP,
 };
 
