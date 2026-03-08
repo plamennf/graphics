@@ -14,14 +14,6 @@ static Camera camera;
 
 static Command_Buffer cb;
 
-struct Shadow_Bounding_Box {
-    float min_x, max_x;
-    float min_y, max_y;
-    float min_z, max_z;
-};
-
-static Shadow_Bounding_Box shadow_bounding_boxes[MAX_SHADOW_CASCADES];
-
 //static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
 static Vector3 directional_light_direction = v3(-0.5f, -0.2f, 0); // Early morning
 
@@ -144,14 +136,6 @@ static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Lig
         max_x = floorf(max_x / world_units_per_texel) * world_units_per_texel;
         min_y = floorf(min_y / world_units_per_texel) * world_units_per_texel;
         max_y = floorf(max_y / world_units_per_texel) * world_units_per_texel;
-
-        shadow_bounding_boxes[i].min_x = min_x;
-        shadow_bounding_boxes[i].min_y = min_y;
-        shadow_bounding_boxes[i].min_z = min_z;
-
-        shadow_bounding_boxes[i].max_x = max_x;
-        shadow_bounding_boxes[i].max_y = max_y;
-        shadow_bounding_boxes[i].max_z = max_z;
         
         Matrix4 light_proj = make_orthographic(min_x, max_x, min_y, max_y, -max_z, -min_z);
         
@@ -299,13 +283,7 @@ static void draw_imgui_stuff(float dt) {
 
     Memory_Budget memory_info = get_vram_memory();
     ImGui::Text("VRAM: %d/%d", memory_info.used / 1000 / 1000, memory_info.max / 1000 / 1000);
-    
-    for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
-        ImGui::Text("X: %f to %f", shadow_bounding_boxes[i].min_x, shadow_bounding_boxes[i].max_x);
-        ImGui::Text("Y: %f to %f", shadow_bounding_boxes[i].min_y, shadow_bounding_boxes[i].max_y);
-        ImGui::Text("Z: %f to %f", shadow_bounding_boxes[i].min_z, shadow_bounding_boxes[i].max_z);
-    }
-    
+        
     ImGui::End();
 
     ImGui::Begin("Meshes");

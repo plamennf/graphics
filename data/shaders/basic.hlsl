@@ -218,7 +218,6 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
 
             default: {
                 L = float3(0.0, 0.0, 0.0);
-                continue;
             } break;
         }
         

@@ -23,8 +23,11 @@ Vertex_Output vertex_main(Mesh_Vertex_Input input) {
         case 3: {
             result.position = mul(light_matrix[3], mul(world_matrix, float4(input.position, 1.0)));
         } break;
+
+        default: {
+            result.position = float4(0, 0, 0, 1);
+        } break;
     }
-    
     
     return result;
 }
