@@ -65,8 +65,10 @@ struct Quad_Vertex_Input {
     float2 uv        : TEXCOORD;
 };
 
-SamplerState sampler_point  : register(s0);
-SamplerState sampler_linear : register(s1);
+SamplerState sampler_point        : register(s0);
+SamplerState sampler_linear       : register(s1);
+SamplerState sampler_point_clamp  : register(s2);
+SamplerState sampler_linear_clamp : register(s3);
 
 Texture2D albedo_texture : register(t0);
 Texture2D normal_texture : register(t1);

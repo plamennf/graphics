@@ -18,10 +18,6 @@
 
 static bool should_vsync;
 
-extern Shader shader_basic;
-extern Shader shader_resolve;
-extern Shader shader_shadow;
-
 extern bool init_shaders();
 
 static bool shadow_maps_created = false;
@@ -31,8 +27,10 @@ static ID3D11DeviceContext *device_context;
 static IDXGISwapChain *swap_chain;
 static u32 swap_chain_flags;
 
-static ID3D11SamplerState *sampler_point  = NULL;
-static ID3D11SamplerState *sampler_linear = NULL;
+static ID3D11SamplerState *sampler_point        = NULL;
+static ID3D11SamplerState *sampler_linear       = NULL;
+static ID3D11SamplerState *sampler_point_clamp  = NULL;
+static ID3D11SamplerState *sampler_linear_clamp = NULL;
 
 /*
 static Gpu_Buffer per_scene_cb;
@@ -111,9 +109,15 @@ static void init_back_buffer() {
     }
     texture_desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     device->CreateTexture2D(&texture_desc, NULL, &offscreen_render_target.texture);
-
+    device->CreateTexture2D(&texture_desc, NULL, &offscreen_bloom_target.texture);
+    device->CreateTexture2D(&texture_desc, NULL, &ping_pong_render_targets[0].texture);
+    device->CreateTexture2D(&texture_desc, NULL, &ping_pong_render_targets[1].texture);
+    
     rtv_desc.Format = texture_desc.Format;
     device->CreateRenderTargetView(offscreen_render_target.texture, &rtv_desc, &offscreen_render_target.rtv);
+    device->CreateRenderTargetView(offscreen_bloom_target.texture, &rtv_desc, &offscreen_bloom_target.rtv);
+    device->CreateRenderTargetView(ping_pong_render_targets[0].texture, &rtv_desc, &ping_pong_render_targets[0].rtv);
+    device->CreateRenderTargetView(ping_pong_render_targets[1].texture, &rtv_desc, &ping_pong_render_targets[1].rtv);
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {};
     srv_desc.Format                    = texture_desc.Format;
@@ -121,10 +125,16 @@ static void init_back_buffer() {
     srv_desc.Texture2D.MostDetailedMip = 0;
     srv_desc.Texture2D.MipLevels       = 1;
     device->CreateShaderResourceView(offscreen_render_target.texture, &srv_desc, &offscreen_render_target.srv);
+    device->CreateShaderResourceView(offscreen_bloom_target.texture, &srv_desc, &offscreen_bloom_target.srv);
+    device->CreateShaderResourceView(ping_pong_render_targets[0].texture, &srv_desc, &ping_pong_render_targets[0].srv);
+    device->CreateShaderResourceView(ping_pong_render_targets[1].texture, &srv_desc, &ping_pong_render_targets[1].srv);
 }
 
 static void release_back_buffer() {
+    release_texture(&ping_pong_render_targets[0]);
+    release_texture(&ping_pong_render_targets[1]);
     release_texture(&offscreen_depth_target);
+    release_texture(&offscreen_bloom_target);
     release_texture(&offscreen_render_target);
     release_texture(&back_buffer);
 }
@@ -241,6 +251,14 @@ void init_renderer(bool vsync) {
 
         sampler_desc.Filter         = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         device->CreateSamplerState(&sampler_desc, &sampler_linear);
+
+        sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+        sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+        device->CreateSamplerState(&sampler_desc, &sampler_linear_clamp);
+
+        sampler_desc.Filter         = D3D11_FILTER_MIN_MAG_MIP_POINT;
+        device->CreateSamplerState(&sampler_desc, &sampler_point_clamp);
     }
     
     //
@@ -295,9 +313,6 @@ void shutdown_renderer() {
     
     SafeRelease(sampler_point);
     SafeRelease(sampler_linear);
-    
-    release_shader(&shader_resolve);
-    release_shader(&shader_basic);
     
     release_back_buffer();
     
@@ -645,13 +660,11 @@ void clear_depth_target(Command_Buffer *cb, Texture *depth_target, float z, u8 s
     cb->context->ClearDepthStencilView(depth_target->dsv, clear_flags, 1.0f, 0);
 }
 
-void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type) {
+void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type, Shader *shader) {
     switch (type) {
         case RENDER_PIPELINE_MESH: {
             cb->context->RSSetState(rasterizer_state_for_mesh_rendering);
             cb->context->OMSetDepthStencilState(depth_stencil_state_for_mesh_rendering, 0);
-            cb->context->VSSetShader(shader_basic.vertex_shader, NULL, 0);
-            cb->context->PSSetShader(shader_basic.pixel_shader,  NULL, 0);
             cb->context->IASetInputLayout(mesh_vertex_input_layout);
             cb->context->OMSetBlendState(opaque_mesh_blend_disabled, NULL, 0xFFFFFFFF);
 
@@ -663,27 +676,28 @@ void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type) {
         case RENDER_PIPELINE_QUAD: {
             cb->context->RSSetState(quad_rasterizer_state);
             cb->context->OMSetDepthStencilState(quad_depth_stencil_state, 0);
-            cb->context->VSSetShader(shader_resolve.vertex_shader, NULL, 0);
-            cb->context->PSSetShader(shader_resolve.pixel_shader,  NULL, 0);
             cb->context->IASetInputLayout(quad_input_layout);
-            cb->context->OMSetBlendState(quad_blend_enabled, NULL, 0xFFFFFFFF);
+            //cb->context->OMSetBlendState(quad_blend_enabled, NULL, 0xFFFFFFFF);
+            cb->context->OMSetBlendState(opaque_mesh_blend_disabled, NULL, 0xFFFFFFFF);
         } break;
 
         case RENDER_PIPELINE_SHADOW: {
             cb->context->RSSetState(rasterizer_state_for_shadow_rendering);
             cb->context->OMSetDepthStencilState(depth_stencil_state_for_mesh_rendering, 0);
             cb->context->OMSetBlendState(no_render_target_write_blend_state, NULL, 0xFFFFFFFF);
-            cb->context->VSSetShader(shader_shadow.vertex_shader, NULL, 0);
-            cb->context->PSSetShader(shader_shadow.pixel_shader,  NULL, 0);
             cb->context->IASetInputLayout(mesh_vertex_input_layout);
         } break;
     }
 
+    Assert(shader);
+    cb->context->VSSetShader(shader->vertex_shader, NULL, 0);
+    cb->context->PSSetShader(shader->pixel_shader, NULL, 0);
+    
     ID3D11Buffer *cbs[] = { cb->per_scene_cb.buffer, cb->per_object_cb.buffer, cb->per_subobject_cb.buffer };
     cb->context->VSSetConstantBuffers(0, ArrayCount(cbs), cbs);
     cb->context->PSSetConstantBuffers(0, ArrayCount(cbs), cbs);
     
-    ID3D11SamplerState *samplers[] = { sampler_point, sampler_linear };
+    ID3D11SamplerState *samplers[] = { sampler_point, sampler_linear, sampler_point_clamp, sampler_linear_clamp };
     cb->context->PSSetSamplers(0, ArrayCount(samplers), samplers);
 
     cb->context->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -701,20 +715,6 @@ void set_per_object_uniforms(Command_Buffer *cb, Per_Object_Uniforms *uniforms) 
     cb->context->Map(cb->per_object_cb.buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &msr);
     memcpy(msr.pData, uniforms, sizeof(*uniforms));
     cb->context->Unmap(cb->per_object_cb.buffer, 0);
-}
-
-void resolve_render_targets(Command_Buffer *cb, Texture *source, Texture *destination) {
-    clear_render_target(cb, destination, v4(0.0f, 0.0f, 0.0f, 1.0f));
-    set_render_targets(cb, 1, destination, NULL);
-    
-    set_pipeline_type(cb, RENDER_PIPELINE_QUAD);
-    set_texture(cb, TEXTURE_ALBEDO, source);
-
-    UINT offset = 0;
-    cb->context->IASetVertexBuffers(0, 1, &fullscreen_quad_vb.buffer, &fullscreen_quad_vb.stride, &offset);
-    cb->context->IASetIndexBuffer(fullscreen_quad_ib.buffer, DXGI_FORMAT_R32_UINT, 0);
-
-    cb->context->DrawIndexed(6, 0, 0);
 }
 
 void render_item(Command_Buffer *cb, Render_Item_Info *info) {

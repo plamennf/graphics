@@ -323,16 +323,16 @@ u64 platform_get_time_in_nanoseconds() {
     return perf_counter.QuadPart * nanoseconds_per_tick;
 }
 
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+
 #ifdef RENDER_OPENGL
 
 //
 // OpenGL
 //
-
-extern "C" {
-    __declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-}
 
 #define LoadGLFunc(func) func = reinterpret_cast <decltype(func)>(wglGetProcAddress(#func))
 

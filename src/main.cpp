@@ -13,9 +13,47 @@ static Mesh *mesh;
 static Camera camera;
 
 static Command_Buffer cb;
+static Gpu_Buffer fullscreen_quad_vertex_buffer;
+static Gpu_Buffer fullscreen_quad_index_buffer;
 
 //static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
 static Vector3 directional_light_direction = v3(-0.5f, -0.2f, 0); // Early morning
+
+static bool init_fullscreen_quad() {
+    Quad_Vertex fullscreen_quad_vertices[] = {
+        { { -1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 1.0f } },
+        { { +1.0f, -1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f } },
+        { { +1.0f, +1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f } },
+        { { -1.0f, +1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f } },
+    };
+
+    u32 fullscreen_quad_indices[] = {
+        0, 1, 2,
+        0, 2, 3,
+    };
+    
+    if (!create_gpu_buffer(&fullscreen_quad_vertex_buffer, GPU_BUFFER_TYPE_VERTEX, sizeof(fullscreen_quad_vertices), sizeof(Quad_Vertex), fullscreen_quad_vertices, false)) return false;
+    if (!create_gpu_buffer(&fullscreen_quad_index_buffer, GPU_BUFFER_TYPE_INDEX, sizeof(fullscreen_quad_indices), sizeof(u32), fullscreen_quad_indices, false)) return false;
+
+    return true;
+}
+
+static void render_fullscreen_quad(Texture *albedo_texture, Texture *bloom_texture, bool horizontal) {
+    Render_Item_Info info;
+    info.vertex_buffer = &fullscreen_quad_vertex_buffer;
+    info.index_buffer  = &fullscreen_quad_index_buffer;
+    info.num_indices   = 6;
+
+    info.albedo_texture             = albedo_texture;
+    info.normal_texture             = bloom_texture;
+    info.metallic_roughness_texture = globals.white_texture;
+    info.ao_texture                 = globals.white_texture;
+    info.emissive_texture           = globals.white_texture;
+
+    info.uniforms.uses_specular_glossiness = horizontal ? 1 : 0;
+    
+    render_item(&cb, &info);
+}
 
 static void imgui_init() {
     float main_scale = platform_imgui_get_scale();
@@ -157,112 +195,165 @@ static void render_scene(Command_Buffer *cb) {
 
 static void draw_one_frame() {
     ZoneScopedN("Set up render commands");
-    
+
     Per_Scene_Uniforms per_scene_uniforms;
-    per_scene_uniforms.projection_matrix = transpose(make_perspective((float)platform_window_width / (float)platform_window_height, CAMERA_FOV, CAMERA_Z_NEAR, CAMERA_Z_FAR));
-    per_scene_uniforms.view_matrix = transpose(get_view_matrix(&camera));
-
-    per_scene_uniforms.camera_position = camera.position;
     
-    Light sun = {};
-    sun.type      = LIGHT_TYPE_DIRECTIONAL;
-    sun.direction = normalize_or_zero(directional_light_direction);
-    sun.color     = v3(1.0f, 0.95f, 0.85f);
-    sun.intensity = 1.2f;
-    //sun.intensity = 10.0f;
-    
-    update_shadow_map_cascade_matrices(&per_scene_uniforms, &sun);
-    
-    Light l0 = {};
-    l0.type = LIGHT_TYPE_POINT;
-    l0.position = v3(0.0f, 32.0f, 0.0f);
-    l0.color = v3(1.0f, 0.85f, 0.7f);
-    l0.intensity = 8.0f;
-    l0.range = 60.0f;
-
-    Light l1 = {};
-    l1.type = LIGHT_TYPE_POINT;
-    l1.position = v3(-30.0f, 15.0f, 0.0f);
-    l1.color = v3(0.4f, 0.6f, 1.0f);
-    l1.intensity = 4.0f;
-    l1.range = 45.0f;
-
-    Light l2 = {};
-    l2.type = LIGHT_TYPE_POINT;
-    l2.position = v3(30.0f, 12.0f, -10.0f);
-    l2.color = v3(1.0f, 1.0f, 1.0f);
-    l2.intensity = 10.0f;
-    l2.range = 40.0f;
-
-    Light l3 = {};
-    l3.type = LIGHT_TYPE_POINT;
-    l3.position = v3(0.0f, 10.0f, -25.0f);
-    l3.color = v3(1.0f, 0.95f, 0.8f);
-    l3.intensity = 3.0f;
-    l3.range = 50.0f;
-
-    Light l4 = {};
-    l4.type = LIGHT_TYPE_POINT;
-    l4.position = v3(-15.0f, 10.0f, 20.0f);
-    l4.color = v3(0.6f, 0.7f, 1.0f);
-    l4.intensity = 4.0f;
-    l4.range = 35.0f;
-
-    Light l5 = {};
-    l5.type = LIGHT_TYPE_POINT;
-    l5.position = v3(20.0f, 18.0f, 10.0f);
-    l5.color = v3(1.0f, 0.9f, 0.75f);
-    l5.intensity = 5.0f;
-    l5.range = 40.0f;
-
-    Light spot_light = {};
-    if (globals.flashlight_on) {
-        spot_light.type      = LIGHT_TYPE_SPOT;
-        spot_light.position  = camera.position;
-        spot_light.direction = normalize_or_zero(camera.target);
-        spot_light.color     = v3(1.0f, 1.0f, 0.9f);
-        spot_light.intensity = 800.0f;
-        spot_light.range     = 50.0f;
-        spot_light.spot_inner_cone_angle = cosf(to_radians(12.5f));
-        spot_light.spot_outer_cone_angle = cosf(to_radians(20.0f));
-    }
-    
-    per_scene_uniforms.lights[0] = sun;
-    per_scene_uniforms.lights[1] = l0;
-    per_scene_uniforms.lights[2] = l1;
-    per_scene_uniforms.lights[3] = l2;
-    per_scene_uniforms.lights[4] = l3;
-    per_scene_uniforms.lights[5] = l4;
-    per_scene_uniforms.lights[6] = l5;
-    per_scene_uniforms.lights[7] = spot_light;
-    
-    //set_per_scene_uniforms(&cb, &per_scene_uniforms);
-
-    set_pipeline_type(&cb, RENDER_PIPELINE_SHADOW);
-
-    for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
-        clear_depth_target(&cb, &shadow_map_targets[i], 1.0f, 0);
-        set_render_targets(&cb, 0, NULL, &shadow_map_targets[i]);
-        set_viewport(&cb, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+    {
+        ZoneScopedN("Set up per scene uniforms");
         
-        per_scene_uniforms.shadow_cascade_index = i;
-        set_per_scene_uniforms(&cb, &per_scene_uniforms);
+        per_scene_uniforms.projection_matrix = transpose(make_perspective((float)platform_window_width / (float)platform_window_height, CAMERA_FOV, CAMERA_Z_NEAR, CAMERA_Z_FAR));
+        per_scene_uniforms.view_matrix = transpose(get_view_matrix(&camera));
+
+        per_scene_uniforms.camera_position = camera.position;
+    
+        Light sun = {};
+        sun.type      = LIGHT_TYPE_DIRECTIONAL;
+        sun.direction = normalize_or_zero(directional_light_direction);
+        sun.color     = v3(1.0f, 0.95f, 0.85f);
+        sun.intensity = 1.2f;
+        //sun.intensity = 10.0f;
+
+        {
+            ZoneScopedN("Update shadow map cascade matrices");
+            update_shadow_map_cascade_matrices(&per_scene_uniforms, &sun);
+        }
+    
+        Light l0 = {};
+        l0.type = LIGHT_TYPE_POINT;
+        l0.position = v3(0.0f, 32.0f, 0.0f);
+        l0.color = v3(1.0f, 0.85f, 0.7f);
+        l0.intensity = 8.0f;
+        l0.range = 60.0f;
+
+        Light l1 = {};
+        l1.type = LIGHT_TYPE_POINT;
+        l1.position = v3(-30.0f, 15.0f, 0.0f);
+        l1.color = v3(0.4f, 0.6f, 1.0f);
+        l1.intensity = 4.0f;
+        l1.range = 45.0f;
+
+        Light l2 = {};
+        l2.type = LIGHT_TYPE_POINT;
+        l2.position = v3(30.0f, 12.0f, -10.0f);
+        l2.color = v3(1.0f, 1.0f, 1.0f);
+        l2.intensity = 10.0f;
+        l2.range = 40.0f;
+
+        Light l3 = {};
+        l3.type = LIGHT_TYPE_POINT;
+        l3.position = v3(0.0f, 10.0f, -25.0f);
+        l3.color = v3(1.0f, 0.95f, 0.8f);
+        l3.intensity = 3.0f;
+        l3.range = 50.0f;
+
+        Light l4 = {};
+        l4.type = LIGHT_TYPE_POINT;
+        l4.position = v3(-15.0f, 10.0f, 20.0f);
+        l4.color = v3(0.6f, 0.7f, 1.0f);
+        l4.intensity = 4.0f;
+        l4.range = 35.0f;
+
+        Light l5 = {};
+        l5.type = LIGHT_TYPE_POINT;
+        l5.position = v3(20.0f, 18.0f, 10.0f);
+        l5.color = v3(1.0f, 0.9f, 0.75f);
+        l5.intensity = 5.0f;
+        l5.range = 40.0f;
+
+        Light spot_light = {};
+        if (globals.flashlight_on) {
+            spot_light.type      = LIGHT_TYPE_SPOT;
+            spot_light.position  = camera.position;
+            spot_light.direction = normalize_or_zero(camera.target);
+            spot_light.color     = v3(1.0f, 1.0f, 0.9f);
+            spot_light.intensity = 800.0f;
+            spot_light.range     = 50.0f;
+            spot_light.spot_inner_cone_angle = cosf(to_radians(12.5f));
+            spot_light.spot_outer_cone_angle = cosf(to_radians(20.0f));
+        }
+    
+        per_scene_uniforms.lights[0] = sun;
+        per_scene_uniforms.lights[1] = l0;
+        per_scene_uniforms.lights[2] = l1;
+        per_scene_uniforms.lights[3] = l2;
+        per_scene_uniforms.lights[4] = l3;
+        per_scene_uniforms.lights[5] = l4;
+        per_scene_uniforms.lights[6] = l5;
+        per_scene_uniforms.lights[7] = spot_light;
+    }
+
+    {
+        ZoneScopedN("Render shadow map depth pass");
+        
+        set_pipeline_type(&cb, RENDER_PIPELINE_SHADOW, &globals.shader_shadow);
+
+        for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
+            clear_depth_target(&cb, &shadow_map_targets[i], 1.0f, 0);
+            set_render_targets(&cb, 0, NULL, &shadow_map_targets[i]);
+            set_viewport(&cb, SHADOW_MAP_WIDTH, SHADOW_MAP_HEIGHT);
+        
+            per_scene_uniforms.shadow_cascade_index = i;
+            set_per_scene_uniforms(&cb, &per_scene_uniforms);
+
+            set_pipeline_type(&cb, RENDER_PIPELINE_SHADOW, &globals.shader_shadow);
+            
+            render_scene(&cb);
+        }
+    }
+
+    {
+        ZoneScopedN("Render main pass");
+        
+        clear_render_target(&cb, &offscreen_render_target, v4(0.2f, 0.5f, 0.8f, 1.0f));
+        clear_depth_target(&cb, &offscreen_depth_target, 1.0f, 0);
+
+        Texture render_targets[] = { offscreen_render_target, offscreen_bloom_target };
+        set_render_targets(&cb, ArrayCount(render_targets), render_targets, &offscreen_depth_target);
+        set_viewport(&cb, platform_window_width, platform_window_height);
+    
+        set_pipeline_type(&cb, RENDER_PIPELINE_MESH, &globals.shader_basic);
 
         render_scene(&cb);
     }
-    
-    clear_render_target(&cb, &offscreen_render_target, v4(0.2f, 0.5f, 0.8f, 1.0f));
-    clear_depth_target(&cb, &offscreen_depth_target, 1.0f, 0);
-    set_render_targets(&cb, 1, &offscreen_render_target, &offscreen_depth_target);
-    set_viewport(&cb, platform_window_width, platform_window_height);
-    
-    set_pipeline_type(&cb, RENDER_PIPELINE_MESH);
 
-    render_scene(&cb);
+    bool horizontal = true;
+    
+    {
+        ZoneScopedN("Render bloom ping-pong pass");
 
-    resolve_render_targets(&cb, &offscreen_render_target, &back_buffer);
+        for (int i = 0; i < 10; i++) {
+            set_texture(&cb, TEXTURE_ALBEDO, NULL);
+            set_render_targets(&cb, 1, &ping_pong_render_targets[(int)horizontal], NULL);
+            set_viewport(&cb, platform_window_width, platform_window_height);
+            set_pipeline_type(&cb, RENDER_PIPELINE_QUAD, &globals.shader_bloom);
+            render_fullscreen_quad(i == 0 ? &offscreen_bloom_target : &ping_pong_render_targets[(int)(!horizontal)], globals.white_texture, horizontal);
+            horizontal = !horizontal;
+        }
+    }
+    
+    {
+        ZoneScopedN("Resolve to back buffer");
+        
+        clear_render_target(&cb, &back_buffer, v4(0, 0, 0, 1));
+        set_render_targets(&cb, 1, &back_buffer, NULL);
+        set_viewport(&cb, platform_window_width, platform_window_height);
+
+        set_pipeline_type(&cb, RENDER_PIPELINE_QUAD, &globals.shader_resolve);
+        
+        render_fullscreen_quad(&offscreen_render_target, &ping_pong_render_targets[(int)(!horizontal)], false);
+    }
+    
+    //resolve_render_targets(&cb, &offscreen_render_target, &back_buffer);
 
     set_texture(&cb, TEXTURE_ALBEDO, NULL);
+    set_texture(&cb, TEXTURE_NORMAL, NULL);
+    set_texture(&cb, TEXTURE_METALLIC_ROUGHNESS, NULL);
+    set_texture(&cb, TEXTURE_AO, NULL);
+    set_texture(&cb, TEXTURE_EMISSIVE, NULL);
+
+    for (int i = 0; i < MAX_SHADOW_CASCADES; i++) {
+        set_texture(&cb, (Texture_Type)(TEXTURE_SHADOW_MAP + i), NULL);
+    }
 }
 
 static void draw_imgui_stuff(float dt) {
@@ -325,16 +416,14 @@ int main(int argc, char *argv[]) {
     defer { release_texture(globals.white_texture); };
     
     if (!init_command_buffer(&cb)) return false;
+    if (!init_fullscreen_quad()) return false;
     
     globals.texture_registry = new Texture_Registry();
     globals.texture_registry->recursive_init_all();
     
     globals.mesh_registry    = new Mesh_Registry();
     globals.mesh_registry->recursive_init_all();
-        
-    //mesh = globals.mesh_registry->find_or_load("Prop_Chair");
-    //mesh = globals.mesh_registry->find_or_load("Acura");
-    //mesh = globals.mesh_registry->find_or_load("Zoro");
+    
     building = globals.mesh_registry->find_or_load("Victorian");
     if (!building) return 1;
 

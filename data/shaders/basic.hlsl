@@ -49,9 +49,9 @@ float pcf_shadow(float3 proj_coords, int cascade_index) {
     float bias = 0.01;
     
     [unroll]
-    for (int x = -3; x <= 3; x++) {
+    for (int x = -2; x <= 2; x++) {
         [unroll]
-        for (int y = - 3; y <= 3; y++) {
+        for (int y = - 2; y <= 2; y++) {
             float s = 0.0;
             switch (cascade_index) {
                 case 0: {
@@ -145,8 +145,13 @@ float3 fresnel_schlick(float cos_theta, float3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }  
 
+struct Pixel_Output {
+    float4 color : SV_TARGET0;
+    float4 bloom : SV_TARGET1;
+};
+
 // From https://learnopengl.com/PBR/Lighting
-float4 pixel_main(Vertex_Output input) : SV_TARGET {
+Pixel_Output pixel_main(Vertex_Output input) {
     float4 full_albedo = albedo_texture.Sample(sampler_linear, input.uv);
     float3 albedo    = full_albedo.rgb * material_albedo_factor.xyz * input.color.rgb;
     
@@ -242,6 +247,17 @@ float4 pixel_main(Vertex_Output input) : SV_TARGET {
 
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
     float3 color   = ambient + Lo + emissive;
+
+    Pixel_Output output;
+
+    output.color = float4(color, 1.0);
+
+    float brightness = dot(color, float3(0.2126, 0.7152, 0.0722));
+    if (brightness > 1.0) {
+        output.bloom = output.color;
+    } else {
+        output.bloom = float4(0.0, 0.0, 0.0, 1.0);
+    }
     
-    return float4(color, 1.0);
+    return output;
 }

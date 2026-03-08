@@ -141,7 +141,10 @@ extern Command_Buffer immediate_cb;
 extern Texture back_buffer;
 
 extern Texture offscreen_render_target;
+extern Texture offscreen_bloom_target;
 extern Texture offscreen_depth_target;
+
+extern Texture ping_pong_render_targets[2];
 
 extern Texture shadow_map_targets[MAX_SHADOW_CASCADES];
 
@@ -159,10 +162,9 @@ void set_render_targets(Command_Buffer *cb, int num_render_targets, Texture *ren
 void clear_render_target(Command_Buffer *cb, Texture *render_target, Vector4 clear_color);
 void set_viewport(Command_Buffer *cb, int width, int height);
 void clear_depth_target(Command_Buffer *cb, Texture *depth_target, float z, u8 stencil);
-void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type);
+void set_pipeline_type(Command_Buffer *cb, Render_Pipeline_Type type, Shader *shader);
 void set_per_scene_uniforms(Command_Buffer *cb, Per_Scene_Uniforms *uniforms);
 void set_per_object_uniforms(Command_Buffer *cb, Per_Object_Uniforms *uniforms);
-void resolve_render_targets(Command_Buffer *cb, Texture *source, Texture *destination);
 void render_item(Command_Buffer *cb, Render_Item_Info *info);
 void set_texture(Command_Buffer *cb, Texture_Type type, Texture *texture);
 

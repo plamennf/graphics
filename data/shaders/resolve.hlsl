@@ -18,8 +18,11 @@ Vertex_Output vertex_main(Quad_Vertex_Input input) {
 
 float4 pixel_main(Vertex_Output input) : SV_TARGET {
     float exposure = 2.0;
-    float4 hdr_color = albedo_texture.Sample(sampler_linear, input.uv);
-    //float3 mapped = hdr_color.rgb / (hdr_color.rgb + float3(1.0, 1.0, 1.0));
+    
+    float4 hdr_color   = albedo_texture.Sample(sampler_linear, input.uv);
+    float4 bloom_color = normal_texture.Sample(sampler_linear, input.uv);
+    hdr_color.rgb += bloom_color.rgb;
+    
     float3 mapped = 1.0 - exp(-hdr_color.rgb * exposure);
     return float4(mapped, 1.0);
 }

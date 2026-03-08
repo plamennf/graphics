@@ -26,6 +26,11 @@ struct Global_Variables {
 
     float shadow_cascade_splits[MAX_SHADOW_CASCADES] = { 10.0f, 25.0f, 60.0f, CAMERA_Z_FAR };
 
+    Shader shader_basic;
+    Shader shader_resolve;
+    Shader shader_bloom;
+    Shader shader_shadow;
+    
     Program_Mode program_mode = PROGRAM_MODE_GAME;
 };
 
