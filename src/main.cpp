@@ -16,6 +16,8 @@ static Command_Buffer cb;
 static Gpu_Buffer fullscreen_quad_vertex_buffer;
 static Gpu_Buffer fullscreen_quad_index_buffer;
 
+static Texture *environment_texture;
+
 //static Vector3 directional_light_direction = v3(0, -1, 0); // Noon
 static Vector3 directional_light_direction = v3(-0.5f, -0.2f, 0); // Early morning
 
@@ -184,6 +186,8 @@ static void update_shadow_map_cascade_matrices(Per_Scene_Uniforms *uniforms, Lig
 }
 
 static void render_scene(Command_Buffer *cb) {
+    set_texture(cb, TEXTURE_ENVIRONMENT, environment_texture);
+    
     render_mesh(cb, cube, v3(-50, -1, -50), v3(0, 0, 0), v3(100, 1, 100), v4(1, 1, 1, 1));
 
     float scale = 10.0f;
@@ -315,7 +319,7 @@ static void draw_one_frame() {
 
         render_scene(&cb);
     }
-
+    
     bool horizontal = true;
     
     {
@@ -419,10 +423,10 @@ int main(int argc, char *argv[]) {
     if (!init_fullscreen_quad()) return false;
     
     globals.texture_registry = new Texture_Registry();
-    globals.texture_registry->recursive_init_all();
+    //globals.texture_registry->recursive_init_all();
     
     globals.mesh_registry    = new Mesh_Registry();
-    globals.mesh_registry->recursive_init_all();
+    //globals.mesh_registry->recursive_init_all();
     
     building = globals.mesh_registry->find_or_load("Victorian");
     if (!building) return 1;
@@ -432,6 +436,9 @@ int main(int argc, char *argv[]) {
 
     mesh = globals.mesh_registry->find_or_load("Zoro");
     if (!mesh) return 1;
+
+    environment_texture = globals.texture_registry->find_or_load("citrus_orchard_road_puresky_4k");
+    if (!environment_texture) return 1;
     
     platform_window_toggle_fullscreen();
     

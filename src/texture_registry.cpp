@@ -21,6 +21,7 @@ Texture *Texture_Registry::find_or_load(const char *name) {
         "png",
         "jpg",
         "jpeg",
+        "hdr",
         "bmp",
     };
 

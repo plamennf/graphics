@@ -145,6 +145,13 @@ float3 fresnel_schlick(float cos_theta, float3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
 }  
 
+float2 dir_to_equirect_uv(float3 dir) {
+    float2 uv;
+    uv.x = atan2(dir.z, dir.x) / (2.0 * PI) + 0.5;
+    uv.y = asin(dir.y) / PI + 0.5;
+    return uv;
+}
+
 struct Pixel_Output {
     float4 color : SV_TARGET0;
     float4 bloom : SV_TARGET1;
@@ -245,7 +252,20 @@ Pixel_Output pixel_main(Vertex_Output input) {
         Lo += ((kD * albedo / PI + specular) * radiance * NdotL) * s;
     }
 
+    float3 R = reflect(-V, N);
+
+    float2 uv_n = dir_to_equirect_uv(N);
+    float2 uv_r = dir_to_equirect_uv(R);
+
+    float3 diffuse = environment_texture.Sample(sampler_linear_clamp, uv_n).rgb * albedo;
+    float mip = roughness * 8.0;
+    float3 specular = environment_texture.SampleLevel(sampler_linear_clamp, uv_r, mip).rgb;
+    float3 F = fresnel_schlick(max(dot(N, V), 0.0), F0);
+
+    float3 kD = (1 - F) * (1 - metallic);
+    
     float3 ambient = float3(0.03, 0.03, 0.03) * albedo * ao;
+    //float3 ambient = (kD * diffuse + specular * F) * ao;
     float3 color   = ambient + Lo + emissive;
 
     Pixel_Output output;

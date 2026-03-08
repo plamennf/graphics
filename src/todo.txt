@@ -1,7 +1,2 @@
-- Make offscreen render targets
-- Blit offscreen render targets to screen
-- Add directional light
-- Make shadow buffers
-- Make shadow cascades
-- Make shadow matrices
-- Add shadows in shader
+- Add SSAO
+- Add IBL

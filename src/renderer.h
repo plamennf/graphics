@@ -76,6 +76,8 @@ enum Texture_Format {
     TEXTURE_FORMAT_UNKNOWN,
 
     TEXTURE_FORMAT_RGBA8,
+
+    TEXTURE_FORMAT_RGBA16F,
     
     TEXTURE_FORMAT_D32,
 };
@@ -126,6 +128,7 @@ enum Texture_Type {
     TEXTURE_METALLIC_ROUGHNESS,
     TEXTURE_AO,
     TEXTURE_EMISSIVE,
+    TEXTURE_ENVIRONMENT,
     TEXTURE_SHADOW_MAP,
 };
 
@@ -170,7 +173,7 @@ void set_texture(Command_Buffer *cb, Texture_Type type, Texture *texture);
 
 bool create_gpu_buffer(Gpu_Buffer *buffer, Gpu_Buffer_Type type, u32 size, u32 stride, void *initial_data, bool is_dynamic);
 void release_gpu_buffer(Gpu_Buffer *buffer);
-bool create_texture(Texture *texture, int width, int height, Texture_Format format, u8 *initial_data);
+bool create_texture(Texture *texture, int width, int height, Texture_Format format, void *initial_data);
 void release_texture(Texture *texture);
 bool load_shader(Shader *shader, String filename, Render_Vertex_Type vertex_type);
 void release_shader(Shader *shader);

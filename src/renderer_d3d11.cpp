@@ -388,7 +388,9 @@ void release_gpu_buffer(Gpu_Buffer *buffer) {
 
 static DXGI_FORMAT dxgi_format(Texture_Format format) {
     switch (format) {
-        case TEXTURE_FORMAT_RGBA8: return DXGI_FORMAT_R8G8B8A8_UNORM;
+        case TEXTURE_FORMAT_RGBA8: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+
+        case TEXTURE_FORMAT_RGBA16F: return DXGI_FORMAT_R16G16B16A16_FLOAT;
 
         case TEXTURE_FORMAT_D32:   return DXGI_FORMAT_D32_FLOAT;
     }
@@ -401,6 +403,8 @@ static int get_bytes_per_pixel(Texture_Format format) {
     switch (format) {
         case TEXTURE_FORMAT_RGBA8: return 4;
 
+        case TEXTURE_FORMAT_RGBA16F: return 4 * sizeof(float) / 2;
+            
         case TEXTURE_FORMAT_D32:   return 4;
     }
 
@@ -408,7 +412,7 @@ static int get_bytes_per_pixel(Texture_Format format) {
     return 0;
 }
 
-bool create_texture(Texture *texture, int width, int height, Texture_Format format, u8 *initial_data) {
+bool create_texture(Texture *texture, int width, int height, Texture_Format format, void *initial_data) {
     int bytes_per_pixel = get_bytes_per_pixel(format);
     
     D3D11_TEXTURE2D_DESC texture_desc = {};

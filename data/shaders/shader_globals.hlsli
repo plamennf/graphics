@@ -75,4 +75,5 @@ Texture2D normal_texture : register(t1);
 Texture2D metallic_roughness_texture : register(t2);
 Texture2D ao_texture : register(t3);
 Texture2D emissive_texture : register(t4);
-Texture2D shadow_textures[MAX_SHADOW_CASCADES] : register(t5);
+Texture2D environment_texture : register(t5);
+Texture2D shadow_textures[MAX_SHADOW_CASCADES] : register(t6);

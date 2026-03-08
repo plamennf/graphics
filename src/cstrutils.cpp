@@ -53,7 +53,7 @@ const char *find_character_from_right(const char *s, char c) {
     if (!s) return NULL;
 
     const char *end = s + string_length(s) - 1;
-    while (*end != *s) {
+    while (end != s) {
         if (*end == c) return end;
         end--;
     }

@@ -36,16 +36,30 @@ bool load_texture(Texture *texture, String _filepath) {
     const char *filepath = temp_c_string(_filepath);
     Assert(filepath);
     
+    const char *extension = find_character_from_right(filepath, '.');
+    if (!extension) return false;
+    
+    extension += 1;
+    
     int width, height, channels;
-    stbi_set_flip_vertically_on_load(1);
-    stbi_uc *data = stbi_load(filepath, &width, &height, &channels, 4);
+    void *data;
+    Texture_Format format;
+    if (strings_match(extension, "hdr")) {
+        data = (void *)stbi_loadf(filepath, &width, &height, &channels, 4);
+        format = TEXTURE_FORMAT_RGBA16F;
+    } else {
+        stbi_set_flip_vertically_on_load(1);
+        data = (void *)stbi_load(filepath, &width, &height, &channels, 4);
+        format = TEXTURE_FORMAT_RGBA8;
+    }
+    
     if (!data) {
         logprintf("Failed to load image '%s'\n", filepath);
         return false;
     }
     defer { stbi_image_free(data); };
 
-    if (!create_texture(texture, width, height, TEXTURE_FORMAT_RGBA8, data)) {
+    if (!create_texture(texture, width, height, format, data)) {
         return false;
     }
 
